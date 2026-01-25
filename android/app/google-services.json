@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "421426117703",
+    "project_id": "paychatkoli",
+    "storage_bucket": "paychatkoli.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:421426117703:android:5b809a4e86a6e700bc0562",
+        "android_client_info": {
+          "package_name": "com.paychat.paychat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "421426117703-n2ri2smdumpijgq5dfu8lm8pntp2uvb9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.paychat.paychat",
+            "certificate_hash": "b51c416c6173a4e113f5592e82696f0767130736"
+          }
+        },
+        {
+          "client_id": "421426117703-2djl4cecot3pa2m9mdk4a5lluqgvh8qm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCyrUDNf1Uwe0b6IhxtiY1BFkRQ7jLHSJE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "421426117703-2djl4cecot3pa2m9mdk4a5lluqgvh8qm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "421426117703-jmt5darq1cj1nmgc2ejla5480222i93g.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.paychat.paychat"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
