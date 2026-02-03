@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Added missing import
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:gap/gap.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/providers/providers.dart'; // Added missing providers import for authServiceProvider
+import '../../core/providers/providers.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/background_painters.dart';
+import '../home/home_screen.dart';
+import 'phone_number_screen.dart';
+import '../auth/biometric_gate.dart';
 
 class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
@@ -22,12 +25,30 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     setState(() => _isLoading = true);
     try {
       final authService = ref.read(authServiceProvider);
-      // This will trigger the stream in main.dart to redirect to HomeScreen
-      await authService.signInWithGoogle();
+      // Sign in and get the user object directly
+      final user = await authService.signInWithGoogle();
 
-      // FORCE REFRESH: Ensure we fetch the newly created user doc
-      // The stream might have triggered too early (before doc creation)
-      ref.refresh(currentUserProvider);
+      // Invalidate the provider to update state for other parts of the app
+      ref.invalidate(currentUserProvider);
+
+      if (!mounted) return;
+
+      // Explicitly navigate based on user state to avoid race conditions
+      if (user.phoneNumber.isEmpty) {
+        // User needs to set up phone number
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const PhoneNumberScreen()),
+          (route) => false,
+        );
+      } else {
+        // User is fully set up, go to home
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const BiometricGate(child: HomeScreen()),
+          ),
+          (route) => false,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -187,14 +208,10 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   const Gap(24),
 
                   // Button
-                  _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : GoogleButton(
-                          onTap: _handleGoogleSignIn,
-                        )
-                          .animate()
-                          .fadeIn(delay: 1000.ms)
-                          .slideY(begin: 0.5, end: 0),
+                  GoogleButton(
+                    onTap: _handleGoogleSignIn,
+                    isLoading: _isLoading,
+                  ).animate().fadeIn(delay: 1000.ms).slideY(begin: 0.5, end: 0),
 
                   const Gap(24),
                 ],

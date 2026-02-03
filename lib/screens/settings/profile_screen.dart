@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/utils/phone_formatter.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/background_painters.dart';
 import '../../widgets/avatars.dart';
 import '../../core/providers/providers.dart';
 
+import '../../core/models/user.dart';
+
 class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({super.key});
+  final User? otherUser;
+  const ProfileScreen({super.key, this.otherUser});
 
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
@@ -35,7 +40,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     super.dispose();
   }
 
-  void _initializeControllers(user) {
+  void _initializeControllers(User user) {
     if (_nameController.text.isEmpty) _nameController.text = user.name;
     if (_phoneController.text.isEmpty) _phoneController.text = user.phoneNumber;
   }
@@ -49,13 +54,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       // Bangladeshi Phone Number Validation
       final phone = _phoneController.text.trim();
-      final bangladeshiNumberRegex = RegExp(r'^(?:\+88)?(01[3-9]\d{8})$');
 
-      if (!bangladeshiNumberRegex.hasMatch(phone)) {
+      if (!PhoneFormatter.isValid(phone)) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Please enter a valid Bangladeshi number (01xxxxxxxxx)')),
+                  const SnackBar(
+                      content: Text(
+                          'Please enter a valid Bangladeshi number (+8801xxxxxxxxx)')),
         );
         setState(() => _isLoading = false);
         return;
@@ -71,7 +75,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
       // Update Phone
       if (phone != user.phoneNumber) {
-        await authService.updatePhoneNumber(phone);
+        await authService.updatePhoneNumber(PhoneFormatter.format(phone));
       }
 
       // Refresh user data
@@ -89,8 +93,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errorMessage = e.toString();
+        String displayError;
+        if (errorMessage.contains('already registered')) {
+          displayError = 'This phone number is already registered to another account';
+        } else {
+          displayError = 'Error updating profile: $e';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating profile: $e')),
+          SnackBar(content: Text(displayError)),
         );
       }
       setState(() => _isLoading = false);
@@ -99,8 +110,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final userAsync = ref.watch(currentUserProvider);
-    final user = userAsync.value;
+    // If otherUser is provided, use it. Otherwise watch current user.
+    final user = widget.otherUser ?? ref.watch(currentUserProvider).value;
+    final isMe = widget.otherUser == null;
 
     if (user == null) {
       return const Scaffold(
@@ -142,31 +154,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
-            child: CircleAvatar(
-              backgroundColor: _isEditing
-                  ? AppColors.primary
-                  : Colors.white.withOpacity(0.2),
-              child: IconButton(
-                icon: Icon(
-                    _isEditing
-                        ? PhosphorIcons.x()
-                        : PhosphorIcons.pencilSimple(),
-                    color: _isEditing ? Colors.white : AppColors.textPrimary),
-                onPressed: () {
-                  setState(() {
-                    _isEditing = !_isEditing;
-                    // Reset fields if cancelling
-                    if (!_isEditing) {
-                      _nameController.text = user.name;
-                      _phoneController.text = user.phoneNumber;
-                    }
-                  });
-                },
+          if (isMe)
+            Padding(
+              padding: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
+              child: CircleAvatar(
+                backgroundColor: _isEditing
+                    ? AppColors.primary
+                    : Colors.white.withOpacity(0.2),
+                child: IconButton(
+                  icon: Icon(
+                      _isEditing
+                          ? PhosphorIcons.x()
+                          : PhosphorIcons.pencilSimple(),
+                      color: _isEditing ? Colors.white : AppColors.textPrimary),
+                  onPressed: () {
+                    setState(() {
+                      _isEditing = !_isEditing;
+                      // Reset fields if cancelling
+                      if (!_isEditing) {
+                        _nameController.text = user.name;
+                        _phoneController.text = user.phoneNumber;
+                      }
+                    });
+                  },
+                ),
               ),
             ),
-          ),
         ],
       ),
       body: Column(
@@ -302,6 +315,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             controller: _phoneController,
                             readOnly: !_isEditing,
                             keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                              PhoneFormatter(),
+                            ],
                             style: GoogleFonts.inter(
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary),
@@ -309,7 +326,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 border: InputBorder.none,
                                 isDense: true,
                                 contentPadding: EdgeInsets.zero,
-                                hintText: "01xxxxxxxxx"),
+                                hintText: "+8801xxxxxxxxx"),
                           ),
                         ),
                         if (_isEditing)
@@ -420,52 +437,54 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const Gap(16),
 
                   // Logout Button
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        // Confirm dialog
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Sign Out'),
-                            content: const Text(
-                                'Are you sure you want to sign out?'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Sign Out',
-                                    style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
-                          ),
-                        );
+                  if (isMe)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          // Confirm dialog
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Sign Out'),
+                              content: const Text(
+                                  'Are you sure you want to sign out?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Sign Out',
+                                      style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
+                            ),
+                          );
 
-                        if (confirm == true) {
-                          await ref.read(authServiceProvider).signOut();
-                          if (mounted) {
-                            Navigator.pop(context); // Close profile screen
+                          if (confirm == true) {
+                            await ref.read(authServiceProvider).signOut();
+                            if (mounted) {
+                              Navigator.pop(context); // Close profile screen
+                            }
                           }
-                        }
-                      },
-                      icon: Icon(PhosphorIcons.signOut(), color: Colors.red),
-                      label: const Text(
-                        "Sign Out",
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
+                        },
+                        icon: Icon(PhosphorIcons.signOut(), color: Colors.red),
+                        label: const Text(
+                          "Sign Out",
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
                         ),
                       ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 12),
-                      ),
                     ),
-                  ),
 
                   const Gap(32),
                 ],

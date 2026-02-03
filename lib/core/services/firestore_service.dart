@@ -299,6 +299,7 @@ class FirestoreService {
                   orElse: () => TransactionStatus.pending,
                 )
               : null,
+          transactionId: data['transactionId'],
         );
       }).toList();
     });

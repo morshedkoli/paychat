@@ -8,7 +8,9 @@ import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_shadows.dart';
-import '../../core/utils/animations.dart';
+import '../../core/models/transaction.dart';
+import '../../core/models/user.dart';
+import '../../screens/summary/report_screen.dart';
 
 class TransactionHistoryScreen extends ConsumerWidget {
   const TransactionHistoryScreen({super.key});
@@ -25,6 +27,21 @@ class TransactionHistoryScreen extends ConsumerWidget {
         elevation: 0,
         automaticallyImplyLeading: false,
         title: const Text('Transaction History'),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReportScreen()),
+              );
+            },
+            icon: Icon(
+              PhosphorIcons.chartPieSlice(),
+              color: AppColors.primary,
+            ),
+          ),
+          const Gap(8),
+        ],
       ),
       body: transactionsAsync.when(
         data: (transactions) {
@@ -65,114 +82,11 @@ class TransactionHistoryScreen extends ConsumerWidget {
             itemCount: transactions.length,
             itemBuilder: (context, index) {
               final transaction = transactions[index];
-
-              // Determine display based on who PAID (sender)
-              // When YOU paid (senderId == you), your balance increases (+) - you're owed
-              // When THEY paid (senderId != you), your balance decreases (-) - you owe
-              final isApproved = transaction.status.name == 'approved' ||
-                  transaction.status.name == 'autoApproved';
-              final isYouPaid =
-                  currentUser != null && transaction.senderId == currentUser.id;
-              // For display: green/positive when you paid, orange/negative when they paid
-              final isIncome = isYouPaid && isApproved;
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                padding: AppSpacing.paddingMd,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: AppSpacing.borderRadiusLg,
-                  boxShadow: AppShadows.sm,
-                ),
-                child: Row(
-                  children: [
-                    // Transaction Icon
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: isIncome
-                            ? AppColors.success.withOpacity(0.1)
-                            : AppColors.warning.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        isIncome
-                            ? PhosphorIcons.arrowDown()
-                            : PhosphorIcons.arrowUp(),
-                        color: isIncome ? AppColors.success : AppColors.warning,
-                        size: 24,
-                      ),
-                    ),
-                    const Gap(16),
-
-                    // Transaction Details
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            transaction.note.isNotEmpty
-                                ? transaction.note
-                                : (isIncome ? 'Received' : 'Sent'),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const Gap(4),
-                          Row(
-                            children: [
-                              _StatusBadge(status: transaction.status.name),
-                              const Gap(8),
-                              Text(
-                                '• ${transaction.currency}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color:
-                                      AppColors.textSecondary.withOpacity(0.8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Amount & Time
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${isIncome ? '+' : '-'}৳${transaction.amount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isIncome
-                                ? AppColors.success
-                                : AppColors.warning,
-                          ),
-                        ),
-                        const Gap(4),
-                        Text(
-                          DateFormat('MMM d, h:mm a')
-                              .format(transaction.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ).animate().fadeIn(
-                    delay: Duration(milliseconds: 50 * index),
-                    duration: 300.ms,
-                  );
+              return _TransactionListItem(
+                transaction: transaction,
+                currentUser: currentUser,
+                index: index,
+              );
             },
           );
         },
@@ -209,8 +123,151 @@ class TransactionHistoryScreen extends ConsumerWidget {
   }
 }
 
+class _TransactionListItem extends ConsumerWidget {
+  final Transaction transaction;
+  final User? currentUser;
+  final int index;
+
+  const _TransactionListItem({
+    required this.transaction,
+    required this.currentUser,
+    required this.index,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Determine display based on who PAID (sender)
+    final isApproved = transaction.status == TransactionStatus.approved ||
+        transaction.status == TransactionStatus.autoApproved;
+    final isYouPaid =
+        currentUser != null && transaction.senderId == currentUser!.id;
+    // For display: green/positive when you paid, orange/negative when they paid
+    final isIncome = isYouPaid && isApproved;
+
+    // Determine other user ID to fetch name
+    final otherUserId =
+        isYouPaid ? transaction.receiverId : transaction.senderId;
+    final otherUserAsync = ref.watch(userProvider(otherUserId));
+
+    return otherUserAsync.when(
+      data: (otherUser) {
+        final otherName = otherUser?.name ?? 'Unknown';
+
+        String title;
+        if (transaction.note.isNotEmpty) {
+          title = '${transaction.note} • $otherName';
+        } else {
+          // Fallback titles if note is empty
+          if (isYouPaid) {
+            title = 'Paid to $otherName';
+          } else {
+            title = 'Paid by $otherName';
+          }
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          padding: AppSpacing.paddingMd,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: AppSpacing.borderRadiusLg,
+            boxShadow: AppShadows.sm,
+          ),
+          child: Row(
+            children: [
+              // Transaction Icon
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isIncome
+                      ? AppColors.success.withOpacity(0.1)
+                      : AppColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isIncome
+                      ? PhosphorIcons.arrowDown()
+                      : PhosphorIcons.arrowUp(),
+                  color: isIncome ? AppColors.success : AppColors.warning,
+                  size: 24,
+                ),
+              ),
+              const Gap(16),
+
+              // Transaction Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Gap(4),
+                    Row(
+                      children: [
+                        _StatusBadge(status: transaction.status),
+                        const Gap(8),
+                        Text(
+                          '• ${transaction.currency}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Amount & Time
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${isIncome ? '+' : '-'}৳${transaction.amount.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isIncome ? AppColors.success : AppColors.warning,
+                    ),
+                  ),
+                  const Gap(4),
+                  Text(
+                    DateFormat('MMM d, h:mm a').format(transaction.createdAt),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ).animate().fadeIn(
+              delay: Duration(milliseconds: 50 * index),
+              duration: 300.ms,
+            );
+      },
+      loading: () => Container(
+          height: 80,
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: const Center(child: CircularProgressIndicator())),
+      error: (_, __) => const SizedBox(), // Hide if user load fails
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
-  final String status;
+  final TransactionStatus status;
 
   const _StatusBadge({required this.status});
 
@@ -220,22 +277,19 @@ class _StatusBadge extends StatelessWidget {
     String label;
 
     switch (status) {
-      case 'approved':
-      case 'autoApproved':
+      case TransactionStatus.approved:
+      case TransactionStatus.autoApproved:
         color = AppColors.success;
         label = 'Approved';
         break;
-      case 'pending':
+      case TransactionStatus.pending:
         color = AppColors.warning;
         label = 'Pending';
         break;
-      case 'rejected':
+      case TransactionStatus.rejected:
         color = AppColors.danger;
         label = 'Rejected';
         break;
-      default:
-        color = AppColors.textSecondary;
-        label = status;
     }
 
     return Container(

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import '../core/models/message.dart';
 import '../core/theme/app_colors.dart';
+import '../core/providers/providers.dart';
 
-class TransactionMessageCard extends StatelessWidget {
+class TransactionMessageCard extends ConsumerWidget {
   final Message message;
   final bool isMe;
 
@@ -16,7 +18,7 @@ class TransactionMessageCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Defines the simplified status text
     String statusText = "Pending Approval";
     if (message.status == TransactionStatus.approved) statusText = "Approved";
@@ -105,7 +107,20 @@ class TransactionMessageCard extends StatelessWidget {
                       child: _StatusButton(
                         label: "Approve",
                         color: const Color(0xFF1ECAD3), // Teal
-                        onTap: () {},
+                        onTap: () async {
+                          if (message.transactionId == null) return;
+                          try {
+                            await ref
+                                .read(firestoreServiceProvider)
+                                .approveTransaction(message.transactionId!);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
                       ),
                     ),
                     const Gap(12),
@@ -113,7 +128,20 @@ class TransactionMessageCard extends StatelessWidget {
                       child: _StatusButton(
                         label: "Reject",
                         color: const Color(0xFFE74C3C), // Red
-                        onTap: () {},
+                        onTap: () async {
+                          if (message.transactionId == null) return;
+                          try {
+                            await ref
+                                .read(firestoreServiceProvider)
+                                .rejectTransaction(message.transactionId!);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
                       ),
                     ),
                   ],

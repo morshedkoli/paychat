@@ -273,8 +273,13 @@ class _SecondaryButtonState extends State<SecondaryButton>
 /// Google Sign-In button
 class GoogleButton extends StatefulWidget {
   final VoidCallback onTap;
+  final bool isLoading;
 
-  const GoogleButton({super.key, required this.onTap});
+  const GoogleButton({
+    super.key,
+    required this.onTap,
+    this.isLoading = false,
+  });
 
   @override
   State<GoogleButton> createState() => _GoogleButtonState();
@@ -308,6 +313,7 @@ class _GoogleButtonState extends State<GoogleButton>
   }
 
   void _onTapDown(TapDownDetails details) {
+    if (widget.isLoading) return;
     setState(() => _isPressed = true);
     _controller.forward();
     HapticFeedback.lightImpact();
@@ -333,7 +339,7 @@ class _GoogleButtonState extends State<GoogleButton>
       onTapDown: _onTapDown,
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
-      onTap: widget.onTap,
+      onTap: widget.isLoading ? null : widget.onTap,
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
@@ -344,43 +350,54 @@ class _GoogleButtonState extends State<GoogleButton>
             border: Border.all(color: AppColors.divider, width: 1.5),
             boxShadow: AppShadows.md,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Google "G" logo placeholder
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.blue.shade700,
-                      Colors.blue.shade500,
-                    ],
+          child: widget.isLoading
+              ? const Center(
+                  child: SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                      color: AppColors.primary,
+                      strokeWidth: 2.5,
+                    ),
                   ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Google "G" logo placeholder
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.blue.shade700,
+                            Colors.blue.shade500,
+                          ],
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        "G",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const Gap(AppSpacing.md),
+                    const Text(
+                      "Continue with Google",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
-                alignment: Alignment.center,
-                child: const Text(
-                  "G",
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const Gap(AppSpacing.md),
-              const Text(
-                "Continue with Google",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

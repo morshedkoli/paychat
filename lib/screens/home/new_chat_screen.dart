@@ -2,14 +2,15 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import '../../core/utils/phone_formatter.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/app_background.dart';
 import '../../widgets/buttons.dart';
-import '../../core/models/chat.dart';
 import '../chat/chat_screen.dart';
 
 class NewChatScreen extends ConsumerStatefulWidget {
@@ -150,6 +151,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                 ),
               ),
               keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                PhoneFormatter(),
+              ],
             ),
           ],
         ),
@@ -176,8 +181,17 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                 return;
               }
 
+              if (!PhoneFormatter.isValid(phone)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text(
+                          'Please enter a valid phone number (+8801xxxxxxxxx)')),
+                );
+                return;
+              }
+
               Navigator.pop(context);
-              _onManualContactAdded(name, phone);
+              _initiateChat(name, PhoneFormatter.format(phone));
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
@@ -193,7 +207,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     );
   }
 
-  Future<void> _onManualContactAdded(String name, String phone) async {
+  Future<void> _initiateChat(String name, String phone) async {
     // Show loading
     showDialog(
       context: context,
@@ -206,7 +220,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     try {
       final currentUser = ref.read(currentUserProvider).value;
       if (currentUser == null) {
-        Navigator.pop(context); // Close loading
+        if (mounted) Navigator.pop(context); // Close loading
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please sign in first')),
         );
@@ -218,13 +232,14 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       // Create chat with phone number
       final chatId = await firestoreService.createChatByPhone(
         currentUserId: currentUser.id,
-        phoneNumber: phone,
+        phoneNumber: PhoneFormatter.format(phone),
         contactName: name,
       );
 
       // Fetch the full chat object to navigate
       final chat = await firestoreService.getChat(chatId, currentUser.id);
 
+      if (!mounted) return;
       Navigator.pop(context); // Close loading
 
       if (chat != null) {
@@ -244,18 +259,30 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
           );
         }
       } else {
-        if (mounted) Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('Chat created but failed to open immediately.')),
         );
       }
     } catch (e) {
-      Navigator.pop(context); // Close loading
+      if (mounted) Navigator.pop(context); // Close loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error creating chat: $e')),
       );
     }
+  }
+
+  void _onContactSelected(Contact contact) {
+    if (contact.phones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This contact has no phone number')),
+      );
+      return;
+    }
+
+    // Get the first phone number
+    final phone = contact.phones.first.number;
+    _initiateChat(contact.displayName, PhoneFormatter.format(phone));
   }
 
   @override
@@ -473,39 +500,6 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  void _onContactSelected(Contact contact) {
-    // Get the first phone number
-    final phone = contact.phones.isNotEmpty ? contact.phones.first.number : '';
-
-    // TODO: Check if user is registered on PayChat, then start chat
-    // For now, show a dialog
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Start Chat with ${contact.displayName}?'),
-        content: Text('Phone: $phone'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context); // Go back to home
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                    content: Text(
-                        'Chat with ${contact.displayName} - Coming soon!')),
-              );
-            },
-            child: const Text('Start Chat'),
-          ),
-        ],
-      ),
     );
   }
 }

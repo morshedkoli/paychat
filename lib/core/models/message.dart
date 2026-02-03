@@ -12,6 +12,7 @@ class Message {
   // Transaction specific
   final double? amount;
   final TransactionStatus? status;
+  final String? transactionId;
 
   const Message({
     required this.id,
@@ -21,6 +22,7 @@ class Message {
     this.type = MessageType.text,
     this.amount,
     this.status,
+    this.transactionId,
   });
 
   bool get isMe => senderId == 'me'; // Simplified

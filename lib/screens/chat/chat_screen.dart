@@ -12,6 +12,7 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/app_background.dart';
 import '../../widgets/transaction_card.dart';
 import '../expense/add_expense_screen.dart';
+import '../settings/profile_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final Chat chat;
@@ -121,110 +122,129 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               centerTitle: false,
               leading: const BackButton(color: AppColors.textPrimary),
               titleSpacing: 0,
-              title: Row(
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                        child: CircleAvatar(
-                          radius: 20,
-                          backgroundColor:
-                              AppColors.primaryLight.withOpacity(0.2),
-                          backgroundImage: widget.chat.user.avatarUrl != null
-                              ? NetworkImage(widget.chat.user.avatarUrl!)
-                              : null,
-                          child: widget.chat.user.avatarUrl == null
-                              ? Text(
-                                  widget.chat.user.name.isNotEmpty
-                                      ? widget.chat.user.name[0].toUpperCase()
-                                      : '?',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                )
-                              : null,
-                        ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          width: 12,
-                          height: 12,
+              title: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ProfileScreen(otherUser: widget.chat.user),
+                    ),
+                  );
+                },
+                child: Row(
+                  children: [
+                    Stack(
+                      children: [
+                        Container(
                           decoration: BoxDecoration(
-                            color: AppColors.success,
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Gap(12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.chat.user.name,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Row(
-                          children: [
-                            Text(
-                              widget.chat.user.phoneNumber.isNotEmpty
-                                  ? widget.chat.user.phoneNumber
-                                  : 'Online',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 4,
                               ),
-                            ),
-                            if (balanceAsync.hasValue &&
-                                balanceAsync.value != 0) ...[
-                              const Gap(8),
-                              Container(
-                                width: 4,
-                                height: 4,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.textDisabled,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const Gap(8),
-                              _SmallBalanceBadge(balance: balanceAsync.value!),
                             ],
-                          ],
+                          ),
+                          child: CircleAvatar(
+                            radius: 20,
+                            backgroundColor:
+                                AppColors.primaryLight.withOpacity(0.2),
+                            backgroundImage: widget.chat.user.avatarUrl != null
+                                ? NetworkImage(widget.chat.user.avatarUrl!)
+                                : null,
+                            child: widget.chat.user.avatarUrl == null
+                                ? Text(
+                                    widget.chat.user.name.isNotEmpty
+                                        ? widget.chat.user.name[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const Gap(12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.chat.user.name,
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            widget.chat.user.phoneNumber.isNotEmpty
+                                ? widget.chat.user.phoneNumber
+                                : 'Online',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
-                IconButton(
-                  icon: Icon(
-                    PhosphorIcons.phone(),
-                    color: AppColors.primary,
+                if (balanceAsync.hasValue && balanceAsync.value != 0)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (balanceAsync.value! > 0
+                                  ? AppColors.success
+                                  : AppColors.warning)
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: (balanceAsync.value! > 0
+                                    ? AppColors.success
+                                    : AppColors.warning)
+                                .withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          'Net: ${balanceAsync.value! > 0 ? '+' : ''}৳${balanceAsync.value!.abs().toStringAsFixed(0)}',
+                          style: TextStyle(
+                            color: balanceAsync.value! > 0
+                                ? AppColors.success
+                                : AppColors.warning,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  onPressed: () {},
-                ),
                 IconButton(
                   icon: Icon(
                     PhosphorIcons.dotsThreeVertical(),
@@ -485,37 +505,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SmallBalanceBadge extends StatelessWidget {
-  final double balance;
-
-  const _SmallBalanceBadge({required this.balance});
-
-  @override
-  Widget build(BuildContext context) {
-    final isPositive = balance > 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: (isPositive ? AppColors.success : AppColors.warning)
-            .withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: (isPositive ? AppColors.success : AppColors.warning)
-              .withOpacity(0.3),
-        ),
-      ),
-      child: Text(
-        'Net: ${balance > 0 ? '+' : ''}৳${balance.abs().toStringAsFixed(0)}',
-        style: TextStyle(
-          color: isPositive ? AppColors.success : AppColors.warning,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
       ),
     );
   }

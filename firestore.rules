@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check phone uniqueness (skips check for empty phones)
+    function isPhoneUnique(phone, userId) {
+      return phone == '' || phone == null
+        || !exists(/databases/$(database)/documents/phoneNumbers/$(phone)) 
+        || get(/databases/$(database)/documents/phoneNumbers/$(phone)).data.userId == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      // Allow creating own user OR creating placeholder users for non-registered contacts
+      allow create: if request.auth != null && (
+        // User creating their own profile
+        (request.auth.uid == userId && isPhoneUnique(request.resource.data.phoneNumber, userId))
+        // OR creating a placeholder for non-registered contact (isRegistered must be false)
+        || (request.resource.data.isRegistered == false)
+      );
+      allow update: if request.auth.uid == userId
+        && isPhoneUnique(request.resource.data.phoneNumber, userId);
+      allow delete: if request.auth.uid == userId;
+    }
+    
+    // Phone lookup collection for uniqueness enforcement
+    match /phoneNumbers/{phone} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null 
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null;
+    }
+    
+    // Chats collection
+    match /chats/{chatId} {
+      allow read: if request.auth != null 
+        && request.auth.uid in resource.data.members;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null 
+        && request.auth.uid in resource.data.members;
+      allow delete: if request.auth != null 
+        && resource.data.createdBy == request.auth.uid;
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update: if request.auth != null;
+        allow delete: if request.auth != null;
+      }
+    }
+    
+    // Transactions collection
+    match /transactions/{transactionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if false; // Transactions cannot be deleted
+    }
+    
+    // Balances collection
+    match /balances/{balanceId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // Group expenses collection
+    match /group_expenses/{expenseId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}

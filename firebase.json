@@ -1,1 +1,26 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"paychatkoli","appId":"1:421426117703:android:5b809a4e86a6e700bc0562","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"paychatkoli","configurations":{"android":"1:421426117703:android:5b809a4e86a6e700bc0562","ios":"1:421426117703:ios:a57ab5197257c3f3bc0562","web":"1:421426117703:web:47d56f1a8e1bc3a8bc0562"}}}}}}
+{
+    "firestore": {
+        "rules": "firestore.rules"
+    },
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "paychatkoli",
+                    "appId": "1:421426117703:android:5b809a4e86a6e700bc0562",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "paychatkoli",
+                    "configurations": {
+                        "android": "1:421426117703:android:5b809a4e86a6e700bc0562",
+                        "ios": "1:421426117703:ios:a57ab5197257c3f3bc0562",
+                        "web": "1:421426117703:web:47d56f1a8e1bc3a8bc0562"
+                    }
+                }
+            }
+        }
+    }
+}

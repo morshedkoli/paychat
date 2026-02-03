@@ -76,9 +76,9 @@ class AuthService {
 
       if (!userDoc.exists) {
         // New user - create profile
-        // Phone number is mandatory, get from parameter or fallback to Google's
-        final String finalPhoneNumber =
-            phoneNumber ?? firebaseUser.phoneNumber ?? '';
+        // Phone number is mandatory, get from parameter or empty (force setup via UI)
+        // We ignore firebaseUser.phoneNumber to ensure the phoneNumbers index is properly updated via updatePhoneNumber()
+        final String finalPhoneNumber = phoneNumber ?? '';
 
         user = models.User(
           id: firebaseUser.uid,
@@ -145,13 +145,61 @@ class AuthService {
     }
   }
 
-  /// Update user phone number (mandatory field)
+  /// Check if phone number is already registered to another user
+  Future<bool> isPhoneNumberTaken(String phoneNumber, {String? excludeUserId}) async {
+    final querySnapshot = await _firestore
+        .collection('users')
+        .where('phoneNumber', isEqualTo: phoneNumber)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) return false;
+    
+    // If excludeUserId provided, check if it's a different user
+    if (excludeUserId != null) {
+      return querySnapshot.docs.first.id != excludeUserId;
+    }
+    return true;
+  }
+
+  /// Update user phone number (mandatory field) with uniqueness check
+  /// Uses Firestore transactions to atomically update phone and maintain index
   Future<void> updatePhoneNumber(String phoneNumber) async {
     final userId = currentUserId;
     if (userId == null) throw Exception('No user signed in');
 
-    await _firestore.collection('users').doc(userId).update({
-      'phoneNumber': phoneNumber,
+    await _firestore.runTransaction((transaction) async {
+      // Check if phone is already taken by another user
+      final phoneDoc = await transaction.get(
+        _firestore.collection('phoneNumbers').doc(phoneNumber)
+      );
+      
+      if (phoneDoc.exists && phoneDoc.data()!['userId'] != userId) {
+        throw Exception('This phone number is already registered to another account');
+      }
+      
+      // Get current user to find old phone
+      final userDoc = await transaction.get(
+        _firestore.collection('users').doc(userId)
+      );
+      final oldPhone = userDoc.data()?['phoneNumber'] as String?;
+      
+      // Delete old phone mapping if exists and different
+      if (oldPhone != null && oldPhone.isNotEmpty && oldPhone != phoneNumber) {
+        transaction.delete(_firestore.collection('phoneNumbers').doc(oldPhone));
+      }
+      
+      // Create new phone mapping
+      transaction.set(
+        _firestore.collection('phoneNumbers').doc(phoneNumber),
+        {'userId': userId, 'createdAt': Timestamp.now()}
+      );
+      
+      // Update user document
+      transaction.update(
+        _firestore.collection('users').doc(userId),
+        {'phoneNumber': phoneNumber}
+      );
     });
   }
 

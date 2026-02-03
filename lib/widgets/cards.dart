@@ -17,12 +17,14 @@ class ChatCard extends ConsumerStatefulWidget {
   final Chat chat;
   final VoidCallback onTap;
   final int? index;
+  final String? heroTagPrefix;
 
   const ChatCard({
     super.key,
     required this.chat,
     required this.onTap,
     this.index,
+    this.heroTagPrefix,
   });
 
   @override
@@ -68,7 +70,7 @@ class _ChatCardState extends ConsumerState<ChatCard> {
             children: [
               // Avatar with hero animation support
               Hero(
-                tag: 'avatar_${widget.chat.id}',
+                tag: '${widget.heroTagPrefix ?? 'avatar'}_${widget.chat.id}',
                 child: _buildAvatar(),
               ),
               const Gap(AppSpacing.md),

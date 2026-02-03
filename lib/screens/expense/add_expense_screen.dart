@@ -96,8 +96,31 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
     }
   }
 
+  Widget _buildKeypadRow(List<String> keys) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: keys.map((key) {
+          if (key == 'backspace') {
+            return _KeypadButton(
+              icon: PhosphorIcons.backspace(),
+              onTap: _onBackspace,
+            );
+          }
+          return _KeypadButton(
+            label: key,
+            onTap: () => _onKeyPressed(key),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Scaffold(
       body: AppBackground(
         showPattern: true,
@@ -116,108 +139,111 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
           ),
           body: Column(
             children: [
-              // Amount Display
+              // Scrollable Top Content
               Expanded(
-                flex: 1,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        widget.chat != null
-                            ? "To ${widget.chat!.user.name}"
-                            : "Amount",
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                      ),
-                      const Gap(8),
-                      Text(
-                        "৳$_amount",
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Note Input
-              Padding(
-                padding: AppSpacing.paddingHorizontalLg,
-                child: TextField(
-                  onChanged: (value) => setState(() => _note = value),
-                  decoration: InputDecoration(
-                    hintText: "Add a note (optional)",
-                    prefixIcon: Icon(PhosphorIcons.notepad()),
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.9),
-                    border: OutlineInputBorder(
-                      borderRadius: AppSpacing.borderRadiusLg,
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ),
-
-              const Gap(16),
-
-              // Keypad
-              Expanded(
-                flex: 3,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(32)),
-                  ),
+                child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      const Gap(16),
-                      Expanded(
-                        child: GridView.count(
-                          crossAxisCount: 3,
-                          childAspectRatio: 2.2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                      const Gap(24),
+                      // Amount Display
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            ...[1, 2, 3, 4, 5, 6, 7, 8, 9]
-                                .map((n) => _KeypadButton(
-                                      label: n.toString(),
-                                      onTap: () => _onKeyPressed(n.toString()),
-                                    )),
-                            _KeypadButton(
-                              label: ".",
-                              onTap: () => _onKeyPressed("."),
+                            Text(
+                              widget.chat != null
+                                  ? "To ${widget.chat!.user.name}"
+                                  : "Amount",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
                             ),
-                            _KeypadButton(
-                              label: "0",
-                              onTap: () => _onKeyPressed("0"),
-                            ),
-                            _KeypadButton(
-                              icon: PhosphorIcons.backspace(),
-                              onTap: _onBackspace,
+                            const Gap(8),
+                            Text(
+                              "৳$_amount",
+                              style: const TextStyle(
+                                fontSize: 48,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
                             ),
                           ],
                         ),
                       ),
+                      const Gap(32),
 
-                      // Add Button
-                      Container(
-                        padding: AppSpacing.paddingMd,
-                        child: PrimaryButton(
-                          label: _isLoading ? "Sending..." : "Add Transaction",
-                          onTap: _isLoading ? null : _addTransaction,
+                      // Note Input
+                      Padding(
+                        padding: AppSpacing.paddingHorizontalLg,
+                        child: TextField(
+                          onChanged: (value) => setState(() => _note = value),
+                          decoration: InputDecoration(
+                            hintText: "Add a note (optional)",
+                            prefixIcon: Icon(PhosphorIcons.notepad()),
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.9),
+                            border: OutlineInputBorder(
+                              borderRadius: AppSpacing.borderRadiusLg,
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
+
+              // Keypad / Action Button
+              // Hide Keypad when system keyboard is open
+              if (!isKeyboardOpen)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(32)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Gap(16),
+                        // Number pad rows
+                        _buildKeypadRow(['1', '2', '3']),
+                        _buildKeypadRow(['4', '5', '6']),
+                        _buildKeypadRow(['7', '8', '9']),
+                        _buildKeypadRow(['.', '0', 'backspace']),
+                        const Gap(8),
+                        // Add Button
+                        Padding(
+                          padding: AppSpacing.paddingMd,
+                          child: PrimaryButton(
+                            label:
+                                _isLoading ? "Sending..." : "Add Transaction",
+                            onTap: _isLoading ? null : _addTransaction,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                // When keyboard is open, just show the button at the bottom (or nothing/keyboard has action)
+                // Typically we can leave the button or hide it.
+                // Let's hide the button here to avoid obstruction, user can close keyboard.
+                // Or better: Show a compact "Done" button or rely on keyboard "Done".
+                const SizedBox(),
             ],
           ),
         ),
@@ -239,20 +265,29 @@ class _KeypadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(50),
-      child: Center(
-        child: icon != null
-            ? Icon(icon, size: 28, color: AppColors.textPrimary)
-            : Text(
-                label ?? "",
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
-                ),
-              ),
+    return SizedBox(
+      width: 72,
+      height: 56,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          splashColor: AppColors.primary.withOpacity(0.1),
+          highlightColor: AppColors.primary.withOpacity(0.05),
+          child: Center(
+            child: icon != null
+                ? Icon(icon, size: 26, color: AppColors.textSecondary)
+                : Text(
+                    label ?? "",
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+          ),
+        ),
       ),
     );
   }

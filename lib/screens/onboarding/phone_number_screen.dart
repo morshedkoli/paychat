@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
 import '../../core/providers/providers.dart';
+import '../../core/utils/phone_formatter.dart';
 import '../../widgets/buttons.dart';
 import '../../widgets/avatars.dart';
 import '../../core/theme/app_colors.dart';
+import '../home/home_screen.dart';
+import '../auth/biometric_gate.dart';
 
 class PhoneNumberScreen extends ConsumerStatefulWidget {
   const PhoneNumberScreen({super.key});
@@ -41,15 +45,15 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
       return;
     }
 
-    // Bangladeshi Phone Number Validation
-    // Matches: +8801xxxxxxxxx or 01xxxxxxxxx
-    final bangladeshiNumberRegex = RegExp(r'^(?:\+88)?(01[3-9]\d{8})$');
-
-    if (!bangladeshiNumberRegex.hasMatch(phone)) {
+    // Use PhoneFormatter for validation
+    if (!PhoneFormatter.isValid(phone)) {
       setState(() =>
-          _error = 'Please enter a valid Bangladeshi number (01xxxxxxxxx)');
+          _error = 'Please enter a valid Bangladeshi number (+8801xxxxxxxxx)');
       return;
     }
+
+    // Ensure strictly formatted
+    final formattedPhone = PhoneFormatter.format(phone);
 
     setState(() {
       _isLoading = true;
@@ -58,12 +62,27 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
 
     try {
       final authService = ref.read(authServiceProvider);
-      await authService.updatePhoneNumber(phone);
+      await authService.updatePhoneNumber(formattedPhone);
 
-      // Invalidate currentUserProvider to trigger re-fetch and navigation check
+      // Invalidate currentUserProvider to update state
       ref.invalidate(currentUserProvider);
+
+      if (!mounted) return;
+
+      // Explicitly navigate to HomeScreen instead of relying on stream
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const BiometricGate(child: HomeScreen()),
+        ),
+        (route) => false,
+      );
     } catch (e) {
-      setState(() => _error = 'Failed to save: $e');
+      final errorMessage = e.toString();
+      if (errorMessage.contains('already registered')) {
+        setState(() => _error = 'This phone number is already registered to another account');
+      } else {
+        setState(() => _error = 'Failed to save: $e');
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -132,9 +151,13 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                PhoneFormatter(),
+              ],
               decoration: InputDecoration(
                 labelText: "Phone Number",
-                hintText: "+1234567890",
+                hintText: "+8801xxxxxxxxx",
                 errorText: _error,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -147,12 +170,11 @@ class _PhoneNumberScreenState extends ConsumerState<PhoneNumberScreen> {
             const Spacer(),
 
             // Save Button
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : PrimaryButton(
-                    label: "Save & Continue",
-                    onTap: _savePhoneNumber,
-                  ),
+            PrimaryButton(
+              label: "Save & Continue",
+              onTap: _savePhoneNumber,
+              isLoading: _isLoading,
+            ),
             const Gap(40),
           ],
         ),

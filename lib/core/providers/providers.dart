@@ -40,6 +40,13 @@ final currentUserProvider = FutureProvider<models.User?>((ref) async {
   return await authService.getUserById(firebaseUser.uid);
 });
 
+/// Fetch User by ID Provider
+final userProvider =
+    FutureProvider.family<models.User?, String>((ref, userId) async {
+  final authService = ref.watch(authServiceProvider);
+  return await authService.getUserById(userId);
+});
+
 // ===== BIOMETRIC PROVIDERS =====
 
 /// Biometric enabled state provider
