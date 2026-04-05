@@ -1,0 +1,28 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "paychat-96225",
+          "appId": "1:713973943888:android:7b82054b5cdc4b29624b55",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "paychat-96225",
+          "configurations": {
+            "android": "1:713973943888:android:7b82054b5cdc4b29624b55",
+            "ios": "1:713973943888:ios:2a7efe3b3a6e142e624b55",
+            "macos": "1:713973943888:ios:2a7efe3b3a6e142e624b55",
+            "web": "1:713973943888:web:0e35f644fbf08876624b55",
+            "windows": "1:713973943888:web:1e8433d36d164d17624b55"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

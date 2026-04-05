@@ -3,7 +3,7 @@
 ## Project Context
 - **Name**: Paychat
 - **Type**: Flutter mobile app
-- **Core features**: TBD (presumably payments and chatting)
+- **Core features**: WhatsApp style chatting app named "PayChat". Features a bottom navigation with three tabs: Home, Analytics, and Settings. Core differentiator: Users can send and receive money (transactions) directly within the chat interface.
 - **Tech stack**: Flutter, Firebase (Auth, Firestore), Riverpod (State Management)
 
 ## Architecture

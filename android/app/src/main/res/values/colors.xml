@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary Brand -->
+    <color name="primary">           #1B6CA8 </color>
+    <color name="primary_dark">      #144F7D </color>
+    <color name="primary_light">     #E8F4FD </color>
+    <color name="primary_container"> #D0E8F8 </color>
+
+    <!-- Accent -->
+    <color name="accent">            #25D366 </color>
+    <color name="accent_dark">       #1DA851 </color>
+
+    <!-- Backgrounds -->
+    <color name="bg_screen">         #F5F7FA </color>
+    <color name="bg_surface">        #FFFFFF </color>
+    <color name="bg_chat">           #ECE5DD </color>
+
+    <!-- Message Bubbles -->
+    <color name="bubble_sent">       #DCF8C6 </color>
+    <color name="bubble_received">   #FFFFFF </color>
+    <color name="bubble_sent_dark">  #25D366 </color>
+
+    <!-- Text -->
+    <color name="text_primary">      #1A1A2E </color>
+    <color name="text_secondary">    #6B7280 </color>
+    <color name="text_disabled">     #BDBDBD </color>
+    <color name="text_on_primary">   #FFFFFF </color>
+    <color name="text_link">         #1B6CA8 </color>
+
+    <!-- Dividers & Borders -->
+    <color name="divider">           #E5E7EB </color>
+    <color name="border">            #D1D5DB </color>
+
+    <!-- Status & Feedback -->
+    <color name="online_indicator">  #4ADE80 </color>
+    <color name="unread_badge">      #EF4444 </color>
+    <color name="delivered_tick">    #6B7280 </color>
+    <color name="read_tick">         #1B6CA8 </color>
+    <color name="warning">           #F59E0B </color>
+    <color name="error">             #DC2626 </color>
+    <color name="success">           #16A34A </color>
+
+    <!-- Icon Tints -->
+    <color name="icon_primary">      #374151 </color>
+    <color name="icon_secondary">    #9CA3AF </color>
+    <color name="icon_on_primary">   #FFFFFF </color>
+</resources>

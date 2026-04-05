@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "713973943888",
+    "firebase_url": "https://paychat-96225-default-rtdb.firebaseio.com",
+    "project_id": "paychat-96225",
+    "storage_bucket": "paychat-96225.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:713973943888:android:7b82054b5cdc4b29624b55",
+        "android_client_info": {
+          "package_name": "com.paychat.paychat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "713973943888-a000lieda64ft8hch3g8i46nmn7rhqbe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.paychat.paychat",
+            "certificate_hash": "61e1ef5bf97fea0632ce1d28e9bcae1dbe2a27e9"
+          }
+        },
+        {
+          "client_id": "713973943888-v72sql1u9rp4rlssra3lqc4e3osveq6p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxiOatusxGzcUDSCG9vrJk_dzaVZf3aJo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "713973943888-v72sql1u9rp4rlssra3lqc4e3osveq6p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "713973943888-i0is6pf39pob9davri90nhal445cj69q.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.paychat.paychat"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
