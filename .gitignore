@@ -16,3 +16,16 @@ android/app/build/
 android/build_err*.txt
 android/emulator.log
 android/signing.txt
+
+# Flutter build & tool artifacts
+.dart_tool/chrome-device/
+.dart_tool/flutter_build/
+build/
+*.g.dart
+*.freezed.dart
+
+# Environment / secrets (never commit these)
+.env
+.env.*
+*.jks
+google-services.json

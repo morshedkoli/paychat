@@ -1,0 +1,31 @@
+{
+  "rules": {
+    "file_transfers": {
+      "$transferId": {
+        // Any authenticated user can read a transfer node
+        // (recipient needs to read the chunks, sender needs to read status)
+        ".read": "auth != null",
+
+        // Only authenticated users can write to a transfer node
+        ".write": "auth != null",
+
+        "meta": {
+          // meta is readable/writable by any signed-in user
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+
+        "chunks": {
+          "$chunkIndex": {
+            ".read": "auth != null",
+            ".write": "auth != null",
+
+            // Each chunk must be a base64 string, max ~85 KB
+            // (60 KB raw → ~80 KB base64, with 5 KB headroom)
+            ".validate": "newData.isString() && newData.val().length <= 87040"
+          }
+        }
+      }
+    }
+  }
+}

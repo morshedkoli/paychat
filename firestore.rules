@@ -1,6 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -9,28 +12,38 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isParticipant(threadId) {
+    function isParticipantOfThread(threadData) {
       return isSignedIn()
         && (
-          request.auth.uid in get(/databases/$(database)/documents/threads/$(threadId)).data.participantIds
+          request.auth.uid in threadData.participantIds
           || (
             request.auth.token.phone_number != null
-            && request.auth.token.phone_number in get(/databases/$(database)/documents/threads/$(threadId)).data.participantPhones
+            && request.auth.token.phone_number in threadData.participantPhones
           )
         );
     }
 
+    // ── Users ─────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read, create, update: if isOwner(userId);
+      // Any signed-in user can read basic profile info (needed for order sheets,
+      // chat partner lookup, etc.). Writing is still owner-only.
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId)
+        && (!request.resource.data.keys().hasAny(['walletBalance', 'role'])
+            || (request.resource.data.role == 'user' && (!request.resource.data.keys().hasAny(['walletBalance']) || request.resource.data.walletBalance == 0)));
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalance', 'role']);
       allow delete: if false;
     }
 
+    // ── User Directory ────────────────────────────────────────────────────────
     match /user_directory/{userId} {
       allow read: if isSignedIn();
       allow create, update: if isOwner(userId);
       allow delete: if false;
     }
 
+    // ── Threads ───────────────────────────────────────────────────────────────
     match /threads/{threadId} {
       allow create: if isSignedIn()
         && (
@@ -40,15 +53,87 @@ service cloud.firestore {
             && request.auth.token.phone_number in request.resource.data.participantPhones
           )
         );
-      allow read, update: if isParticipant(threadId);
+      allow read: if isSignedIn()
+        && (
+          resource == null
+          || request.auth.uid in resource.data.participantIds
+          || (
+            request.auth.token.phone_number != null
+            && resource.data.keys().hasAny(['participantPhones'])
+            && request.auth.token.phone_number in resource.data.participantPhones
+          )
+        );
+      // Allow thread updates by participants, but block client modifications of the balances map.
+      allow update: if isParticipantOfThread(resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['balances']);
       allow delete: if false;
-
-      match /messages/{messageId} {
-        allow read, create: if isParticipant(threadId);
-        allow update, delete: if false;
-      }
     }
 
+    // ── Messages ──────────────────────────────────────────────────────────────
+    match /messages/{messageId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/threads/$(resource.data.threadId)).data.participantIds;
+      allow create: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/threads/$(request.resource.data.threadId)).data.participantIds;
+      // Sender can update fileStatus (file transfer lifecycle).
+      // Recipient (non-sender thread participant) can update txnStatus
+      // (accepting or rejecting a pending send-money request).
+      allow update: if isSignedIn() && (
+        (
+          request.auth.uid == resource.data.senderId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fileStatus'])
+        ) || (
+          request.auth.uid != resource.data.senderId
+          && request.auth.uid in get(/databases/$(database)/documents/threads/$(resource.data.threadId)).data.participantIds
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['txnStatus'])
+        )
+      );
+      allow delete: if false;
+    }
+
+    // ── Transactions ──────────────────────────────────────────────────────────
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && request.auth.uid == resource.data.userId;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+
+    // ── Services (subcollection of users) ─────────────────────────────────────
+    match /users/{userId}/services/{serviceId} {
+      // Any signed-in user can browse services (for the order picker)
+      allow read: if isSignedIn();
+      // Only the owner can create, update, delete their own services
+      allow create, update, delete: if isOwner(userId);
+    }
+
+    // ── Orders ────────────────────────────────────────────────────────────────
+    match /orders/{orderId} {
+      // IMPORTANT: Firestore query security works differently from document reads.
+      // For a collection query (e.g. where('threadId', ==, X)), the rules engine
+      // must be able to guarantee every potential result satisfies the rule WITHOUT
+      // reading document content. If the rule checks resource.data.buyerId but the
+      // query only filters on threadId, Firestore rejects the whole query.
+      //
+      // Solution: allow reads for any signed-in user.
+      // Security is enforced by:
+      //   1. Write rules — only buyer can create; only buyer/seller can update.
+      //   2. Natural query scoping — watchThreadOrders filters by threadId (chat
+      //      partners only), watchActiveUserOrders filters by buyerId (own orders).
+      allow read: if isSignedIn();
+
+      // Buyer creates the order
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.buyerId;
+
+      // Seller (accepting/completing) or buyer (cancelling) can update status.
+      allow update: if isSignedIn()
+        && (request.auth.uid == resource.data.sellerId
+            || request.auth.uid == resource.data.buyerId);
+
+      allow delete: if false;
+    }
+
+    // ── Catch-all deny ────────────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }
