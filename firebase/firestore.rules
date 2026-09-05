@@ -25,6 +25,14 @@ service cloud.firestore {
       return resource.data;
     }
 
+    // The phone number Firebase Auth itself verified by OTP. Present only on
+    // accounts with a linked phone credential, which is every real account.
+    // Binding writes to this claim is what stops a signed in user from
+    // claiming a phone number that is not theirs.
+    function verifiedPhone() {
+      return request.auth.token.phone_number;
+    }
+
     // ---------------------------------------------------------------- users
 
     match /users/{userId} {
@@ -32,8 +40,8 @@ service cloud.firestore {
       // name and picture. Nothing sensitive lives here.
       allow read: if signedIn();
       allow create: if signedIn() && userId == uid()
-                    && incoming().phone is string
-                    && incoming().name is string;
+                    && incoming().name is string
+                    && incoming().phone == verifiedPhone();
       allow update: if signedIn() && userId == uid()
                     // The phone number is fixed at registration.
                     && incoming().phone == existing().phone;
@@ -42,9 +50,16 @@ service cloud.firestore {
 
     // Claims a phone number for exactly one account. Create-only, so a number
     // can never be taken over by a later registration.
+    //
+    // The document id must equal the caller's own OTP-verified number.
+    // Without that check any signed in user could squat on someone else's
+    // number before they register, and could point lookups for that number at
+    // their own account.
     match /phoneIndex/{e164} {
       allow read: if signedIn();
-      allow create: if signedIn() && incoming().uid == uid();
+      allow create: if signedIn()
+                    && incoming().uid == uid()
+                    && e164 == verifiedPhone();
       allow update, delete: if false;
     }
 

@@ -7,15 +7,44 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 0 — project scaffold. Navigation, theme, Room schema, dependency
-injection, and the ledger arithmetic are in place. Screens are placeholders that
-name the phase which replaces them.
+Phase 1 — authentication. Registration, OTP verification, password login,
+password reset, phone number claiming, and single-device sessions are
+implemented. Remaining screens are placeholders that name the phase which
+replaces them.
 
-Implemented and unit tested already:
+Implemented and unit tested:
 
 - `core/money/Money.kt` — integer poisha, exact parsing and formatting
 - `core/ledger/BalanceCalculator.kt` — direction, acceptance, and sign rules
+- `core/phone/PhoneNumbers.kt` — E.164 normalisation
+- `core/validation/Validators.kt` — name, password, and OTP rules
+- `data/auth/` — registration, sign in, password reset
 - `firebase/firestore.rules` — every ledger invariant from the spec
+
+## How an account works
+
+Firebase Auth has no password on the phone provider and no phone on the
+password provider, but PayChat needs both. An account is therefore a phone
+credential plus a linked Email/Password credential whose address is derived
+from the number by `SyntheticEmail` (`p8801712345678@phone.paychat.invalid`).
+No mail is ever sent there.
+
+Registration: verify OTP, sign in with the phone credential, link the password
+credential, then write `users/{uid}` and `phoneIndex/{e164}` in one batch. The
+account is only created after the number is verified, and if linking the
+password fails the half-built account is deleted rather than left behind.
+
+Login needs no SMS: the synthetic address is recomputed from the typed number.
+Password reset verifies by OTP and then sets the new password.
+
+**Because the sign-in identifier is derivable from a phone number, the password
+is the only secret protecting an account.** `Validators` enforces a minimum
+length and rejects digit-only and common passwords. Enable **App Check** and
+Firebase Auth's **email enumeration protection** on the project before release.
+
+One device at a time: signing in writes a new `activeSessionId` on the user
+document. Every other device watches that field and signs itself out when the
+value stops matching its own.
 
 ## Opening the project
 
