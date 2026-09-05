@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PayChat</string>
+    <string name="channel_messages">messages</string>
+    <string name="channel_messages_name">Messages</string>
+    <string name="channel_transactions">transactions</string>
+    <string name="channel_transactions_name">Transactions</string>
+    <string name="channel_reminders">reminders</string>
+    <string name="channel_reminders_name">Due date reminders</string>
+</resources>

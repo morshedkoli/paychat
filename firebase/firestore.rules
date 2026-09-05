@@ -1,0 +1,190 @@
+rules_version = '2';
+
+// PayChat security rules.
+//
+// These rules are the only thing standing between a user and someone else's
+// money records, so every ledger invariant from docs/SPEC.md section 6 is
+// enforced here rather than in the client.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ---------------------------------------------------------------- users
+
+    match /users/{userId} {
+      // Profiles are readable by any signed in user so that a chat can show a
+      // name and picture. Nothing sensitive lives here.
+      allow read: if signedIn();
+      allow create: if signedIn() && userId == uid()
+                    && incoming().phone is string
+                    && incoming().name is string;
+      allow update: if signedIn() && userId == uid()
+                    // The phone number is fixed at registration.
+                    && incoming().phone == existing().phone;
+      allow delete: if false;
+    }
+
+    // Claims a phone number for exactly one account. Create-only, so a number
+    // can never be taken over by a later registration.
+    match /phoneIndex/{e164} {
+      allow read: if signedIn();
+      allow create: if signedIn() && incoming().uid == uid();
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------- threads
+
+    match /threads/{threadId} {
+
+      function isMember() {
+        return signedIn() && uid() in resource.data.members;
+      }
+
+      function isMemberOfIncoming() {
+        return signedIn() && uid() in incoming().members;
+      }
+
+      allow read: if isMember();
+      allow create: if isMemberOfIncoming()
+                    && incoming().members.size() <= 2;
+      allow update: if isMember()
+                    // Membership is set at creation and by the handover
+                    // function only, never by an ordinary client update.
+                    && incoming().members == existing().members;
+      allow delete: if false;
+
+      // ----------------------------------------------------------- messages
+
+      match /messages/{messageId} {
+
+        function inThread() {
+          return signedIn()
+                 && uid() in get(/databases/$(database)/documents/threads/$(threadId)).data.members;
+        }
+
+        allow read: if inThread();
+        allow create: if inThread() && incoming().senderId == uid();
+        // Only receipt fields may change after a message is written.
+        allow update: if inThread()
+                      && incoming().diff(existing()).affectedKeys()
+                         .hasOnly(['deliveredTo', 'readBy']);
+        allow delete: if false;
+      }
+
+      // ------------------------------------------------------- transactions
+
+      match /transactions/{txnId} {
+
+        function members() {
+          return get(/databases/$(database)/documents/threads/$(threadId)).data.members;
+        }
+
+        function inThread() {
+          return signedIn() && uid() in members();
+        }
+
+        function isLocalThread() {
+          return get(/databases/$(database)/documents/threads/$(threadId)).data.isLocal == true;
+        }
+
+        function validAmount() {
+          return incoming().amountMinor is int && incoming().amountMinor > 0;
+        }
+
+        function validDirection() {
+          return incoming().direction in ['SENT', 'RECEIVED'];
+        }
+
+        // A SENT claim raises the counterparty's debt, so it starts PENDING.
+        // A RECEIVED claim only lowers it, so it applies at once.
+        // On a local (one-sided) thread there is nobody to accept, so both
+        // start ACCEPTED and carry unconfirmed = true.
+        function validInitialStatus() {
+          return isLocalThread()
+            ? (incoming().status == 'ACCEPTED' && incoming().unconfirmed == true)
+            : (incoming().direction == 'SENT'
+                 ? incoming().status == 'PENDING'
+                 : incoming().status == 'ACCEPTED');
+        }
+
+        function immutableFieldsUnchanged() {
+          return incoming().createdBy == existing().createdBy
+              && incoming().direction == existing().direction
+              && incoming().amountMinor == existing().amountMinor
+              && incoming().createdAt == existing().createdAt
+              && incoming().reversesId == existing().reversesId;
+        }
+
+        allow read: if inThread();
+
+        allow create: if inThread()
+                      && incoming().createdBy == uid()
+                      && validAmount()
+                      && validDirection()
+                      && validInitialStatus();
+
+        allow update: if inThread()
+                      && immutableFieldsUnchanged()
+                      && (
+                        // The counterparty accepts or rejects a pending item.
+                        (existing().status == 'PENDING'
+                          && existing().createdBy != uid()
+                          && incoming().status in ['ACCEPTED', 'REJECTED']
+                          && incoming().resolvedBy == uid())
+
+                        // The author cancels their own pending item.
+                        || (existing().status == 'PENDING'
+                          && existing().createdBy == uid()
+                          && incoming().status == 'CANCELLED'
+                          && incoming().resolvedBy == uid())
+
+                        // The inheriting user reviews unconfirmed history.
+                        // Only they may clear the flag, and only on a row they
+                        // did not write themselves.
+                        || (existing().unconfirmed == true
+                          && existing().createdBy != uid()
+                          && incoming().unconfirmed == false
+                          && incoming().status in ['ACCEPTED', 'REJECTED'])
+
+                        // Marking an entry as reversed by a later entry.
+                        || (existing().status == 'ACCEPTED'
+                          && existing().reversedBy == null
+                          && incoming().status == 'ACCEPTED'
+                          && incoming().reversedBy is string
+                          && incoming().diff(existing()).affectedKeys()
+                             .hasOnly(['reversedBy']))
+                      );
+
+        // Accepted, rejected and cancelled entries are permanent. Corrections
+        // are made with a reversing entry, never by editing history.
+        allow delete: if false;
+      }
+    }
+
+    // ------------------------------------------------- per-user subcollections
+
+    match /users/{userId}/threadBalances/{threadId} {
+      allow read, write: if signedIn() && userId == uid();
+    }
+
+    match /users/{userId}/localContacts/{contactId} {
+      allow read, write: if signedIn() && userId == uid();
+    }
+  }
+}
