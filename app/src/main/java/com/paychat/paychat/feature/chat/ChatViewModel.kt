@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.model.MessageType
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
@@ -144,7 +145,7 @@ class ChatViewModel @Inject constructor(
     private fun actOnTransaction(block: suspend () -> Result<Unit>) {
         viewModelScope.launch {
             block().onFailure { error ->
-                _state.update { it.copy(error = error.message ?: "That did not work.") }
+                _state.update { it.copy(error = error.userMessage("That did not work.")) }
             }
         }
     }
@@ -157,7 +158,7 @@ class ChatViewModel @Inject constructor(
                 if (blocked) moderation.block(threadId) else moderation.unblock(threadId)
             result.onFailure { error ->
                 _state.update {
-                    it.copy(error = error.message ?: "That did not work.")
+                    it.copy(error = error.userMessage("That did not work."))
                 }
             }
         }
@@ -171,7 +172,7 @@ class ChatViewModel @Inject constructor(
                 }
                 .onFailure { error ->
                     _state.update {
-                        it.copy(error = error.message ?: "That report was not filed.")
+                        it.copy(error = error.userMessage("That report was not filed."))
                     }
                 }
         }
@@ -192,7 +193,7 @@ class ChatViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         draft = body,
-                        error = error.message ?: "Could not send that message.",
+                        error = error.userMessage("Could not send that message."),
                     )
                 }
             }
@@ -280,7 +281,7 @@ class ChatViewModel @Inject constructor(
     ) {
         chat.sendMedia(threadId, messageId, type, localPath, durationMs).onFailure { error ->
             _state.update {
-                it.copy(error = error.message ?: "Could not attach that file.")
+                it.copy(error = error.userMessage("Could not attach that file."))
             }
         }
     }

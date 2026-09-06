@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.ledger.LedgerStatement
 import com.paychat.paychat.core.ledger.StatementLine
 import com.paychat.paychat.core.model.TxnStatus
@@ -102,7 +103,7 @@ class LedgerViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             exporting = false,
-                            error = error.message ?: "Could not create that statement.",
+                            error = error.userMessage("Could not create that statement."),
                         )
                     }
                 }

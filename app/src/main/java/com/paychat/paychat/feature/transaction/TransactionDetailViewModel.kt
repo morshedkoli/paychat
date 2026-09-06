@@ -3,6 +3,7 @@ package com.paychat.paychat.feature.transaction
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.ledger.BalanceCalculator
 import com.paychat.paychat.core.ledger.TransactionRules
 import com.paychat.paychat.data.auth.AuthRepository
@@ -82,7 +83,7 @@ class TransactionDetailViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             working = false,
-                            error = error.message ?: "That did not work.",
+                            error = error.userMessage("That did not work."),
                         )
                     }
                 },

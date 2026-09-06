@@ -3,6 +3,7 @@ package com.paychat.paychat.feature.inherited
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.ledger.BalanceCalculator
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
@@ -107,7 +108,7 @@ class InheritedReviewViewModel @Inject constructor(
                 onSuccess = { _state.update { it.copy(working = false) } },
                 onFailure = { error ->
                     _state.update {
-                        it.copy(working = false, error = error.message ?: "That did not work.")
+                        it.copy(working = false, error = error.userMessage("That did not work."))
                     }
                 },
             )

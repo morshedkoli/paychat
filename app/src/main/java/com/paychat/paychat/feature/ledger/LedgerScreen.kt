@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +42,7 @@ import com.paychat.paychat.core.ledger.StatementLine
 import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.local.entity.TransactionEntity
+import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.components.Timestamps
 import com.paychat.paychat.ui.components.shareStatement
 import com.paychat.paychat.ui.theme.AmountLargeStyle
@@ -137,11 +139,11 @@ fun LedgerScreen(
             HorizontalDivider()
 
             if (state.lines.isEmpty() && !state.loading) {
-                Text(
-                    "No money recorded with ${state.peerName} yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(24.dp),
+                EmptyState(
+                    icon = Icons.Filled.Payments,
+                    title = "Nothing recorded yet",
+                    body = "Money you record with " + state.peerName +
+                        " appears here with a running balance.",
                 )
             }
 

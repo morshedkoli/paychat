@@ -2,6 +2,7 @@ package com.paychat.paychat.feature.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.phone.PhoneNumbers
 import com.paychat.paychat.core.validation.Validators
 import com.paychat.paychat.data.contacts.ContactsRepository
@@ -87,7 +88,7 @@ class AddContactViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             submitting = false,
-                            error = error.message ?: "Could not add that contact.",
+                            error = error.userMessage("Could not add that contact."),
                         )
                     }
                 },

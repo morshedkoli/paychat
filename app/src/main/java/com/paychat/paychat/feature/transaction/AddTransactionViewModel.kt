@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.model.TxnDirection
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.chat.ChatRepository
@@ -131,7 +132,7 @@ class AddTransactionViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             saving = false,
-                            error = error.message ?: "Could not record that transaction.",
+                            error = error.userMessage("Could not record that transaction."),
                         )
                     }
                 },

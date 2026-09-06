@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.data.moderation.ReportReason
 import com.paychat.paychat.ui.components.Avatar
+import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.theme.AmountStyle
 import com.paychat.paychat.ui.theme.PayChatTheme
 import java.io.File
@@ -235,6 +236,22 @@ fun ChatScreen(
                 state = listState,
                 reverseLayout = true,
             ) {
+                if (state.messages.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.Payments,
+                            title = "No messages yet",
+                            body = if (state.isLocal) {
+                                state.peerName + " is not on PayChat yet. You can " +
+                                    "still record money, and it follows them here " +
+                                    "when they join."
+                            } else {
+                                "Say hello, or record money with the plus button."
+                            },
+                        )
+                    }
+                }
+
                 items(state.messages, key = { it.messageId }) { message ->
                     val transaction = message.txnId?.let(state.transactions::get)
                     if (transaction != null) {

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.ui.components.Avatar
+import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.components.PrimaryButton
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,11 +137,13 @@ fun ContactsScreen(
 
                 if (state.isEmpty && state.permissionGranted && !state.syncing) {
                     item {
-                        Text(
-                            "No contacts yet. Add someone by hand with the button below.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(24.dp),
+                        EmptyState(
+                            icon = Icons.Default.PersonAdd,
+                            title = "No contacts to show",
+                            body = "Nobody in your address book is on PayChat yet. " +
+                                "You can still add a name and number by hand.",
+                            actionLabel = "Add a contact",
+                            onAction = onAddContact,
                         )
                     }
                 }

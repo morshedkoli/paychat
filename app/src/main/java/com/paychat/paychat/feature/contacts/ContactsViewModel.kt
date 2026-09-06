@@ -2,6 +2,7 @@ package com.paychat.paychat.feature.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.data.contacts.ContactsRepository
 import com.paychat.paychat.data.local.entity.DeviceContactEntity
 import com.paychat.paychat.data.local.entity.LocalContactEntity
@@ -116,7 +117,7 @@ class ContactsViewModel @Inject constructor(
                 onSuccess = { threadId -> _state.update { it.copy(openThreadId = threadId) } },
                 onFailure = { error ->
                     _state.update {
-                        it.copy(error = error.message ?: "Could not open that conversation.")
+                        it.copy(error = error.userMessage("Could not open that conversation."))
                     }
                 },
             )

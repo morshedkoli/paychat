@@ -3,6 +3,7 @@ package com.paychat.paychat.feature.home
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.ledger.BalanceCalculator
 import com.paychat.paychat.core.ledger.BalanceSummary
 import com.paychat.paychat.core.money.Money
@@ -131,7 +132,7 @@ class HomeViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             exporting = false,
-                            error = error.message ?: "Could not create that statement.",
+                            error = error.userMessage("Could not create that statement."),
                         )
                     }
                 }

@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -38,6 +40,7 @@ import com.paychat.paychat.data.search.MessageHit
 import com.paychat.paychat.data.search.PersonHit
 import com.paychat.paychat.data.search.TransactionHit
 import com.paychat.paychat.ui.components.Avatar
+import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.components.Timestamps
 import com.paychat.paychat.ui.theme.AmountStyle
 
@@ -101,12 +104,19 @@ fun SearchScreen(
             // previous keystroke stay readable while the next one runs.
             if (state.searching) LinearProgressIndicator(Modifier.fillMaxWidth())
 
-            if (state.nothingFound) {
-                Text(
-                    "Nothing matched \"${state.results.query}\".",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(24.dp),
+            when {
+                state.nothingFound -> EmptyState(
+                    icon = Icons.Default.SearchOff,
+                    title = "Nothing matched",
+                    body = "No person, message or note contains " +
+                        "\"" + state.results.query + "\".",
+                )
+
+                state.query.isBlank() -> EmptyState(
+                    icon = Icons.Default.Search,
+                    title = "Search everything on this device",
+                    body = "Names and numbers, the words in a message, and the " +
+                        "note written on a transaction.",
                 )
             }
 

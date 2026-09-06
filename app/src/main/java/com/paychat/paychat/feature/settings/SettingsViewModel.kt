@@ -3,6 +3,7 @@ package com.paychat.paychat.feature.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.data.export.StatementExporter
 import com.paychat.paychat.data.profile.ProfileRepository
 import com.paychat.paychat.data.settings.AppPreferences
@@ -71,7 +72,7 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             profile.setName(trimmed).onFailure { error ->
-                _state.update { it.copy(message = error.message ?: "That name was not saved.") }
+                _state.update { it.copy(message = error.userMessage("That name was not saved.")) }
             }
         }
     }
@@ -82,7 +83,7 @@ class SettingsViewModel @Inject constructor(
             profile.setPhoto(source)
                 .onFailure { error ->
                     _state.update {
-                        it.copy(message = error.message ?: "That picture was not uploaded.")
+                        it.copy(message = error.userMessage("That picture was not uploaded."))
                     }
                 }
             _state.update { it.copy(uploadingPhoto = false) }
@@ -108,7 +109,7 @@ class SettingsViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             exporting = false,
-                            message = error.message ?: "Could not create that statement.",
+                            message = error.userMessage("Could not create that statement."),
                         )
                     }
                 }
