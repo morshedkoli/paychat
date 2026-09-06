@@ -49,8 +49,8 @@ corrected, so the history remains auditable and both people can see what
 changed.
 
 The balance is never the authority. It is recomputed from the transaction rows
-after every change and cached on the thread row for the lists, and it is always
-derivable again. `BalanceCalculator.viewerIsPayer` is the single place that
+after every change and cached only so the lists do not have to load every
+transaction of every conversation; it is always derivable again. `BalanceCalculator.viewerIsPayer` is the single place that
 decides who handed money over, so the interface can say "you gave" on one
 screen and "you received" on the other without the two disagreeing.
 
