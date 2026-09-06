@@ -7,19 +7,15 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 9 — settings, app lock, blocking, and the rough edges. Every screen in
-the specification is now built. Settings carries the profile, the colour
-scheme, the lock, and the export; the app can be locked behind the phone's own
-screen lock; a conversation can be blocked or reported without touching what
-it records; failures speak in one voice and empty screens have one shape.
+Phase 10 — the last one. The database migrates instead of being wiped, the
+rules are tested against the rules engine, the limits rules cannot express
+are counted server side, and the app can export everything it holds or delete
+the account outright. The release build is minified and signable, and the
+README carries the checklist for the first upload.
 
-The typing indicator listed in the specification is still not built. It needs
-a presence write on every keystroke, which is a cost worth measuring against
-the abuse limits in phase 10 rather than adding blind.
-
-What phase 10 still owes: real Room migrations in place of the destructive
-one, rules hardening and abuse limits, data export and account deletion, and
-the Play Store release build.
+The typing indicator listed in the specification is the one thing not built.
+It needs a presence write on every keystroke, which is a real cost against
+the rate limits now in place, and it was not worth adding blind at the end.
 
 Implemented and unit tested:
 
@@ -42,6 +38,9 @@ Implemented and unit tested:
 - `data/settings/` — theme and lock preferences, and the lock itself
 - `data/moderation/` — blocking a conversation, and reporting one
 - `core/errors/UserMessage.kt` — one sentence per failure, never a status code
+- `data/local/Migrations.kt` — real schema migrations, checked on a device
+- `data/account/` — deleting the account, and what deletion leaves behind
+- `firebase/tests/` — the security rules, run against the rules engine
 - `firebase/firestore.rules` — every ledger invariant from the spec
 
 ## How the ledger works
