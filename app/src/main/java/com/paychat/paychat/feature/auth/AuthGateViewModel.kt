@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.paychat.paychat.data.auth.AuthRepository
+import com.paychat.paychat.data.notifications.PushTokens
 import com.paychat.paychat.data.session.SessionGuard
 import com.paychat.paychat.data.session.SessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,6 +27,7 @@ class AuthGateViewModel @Inject constructor(
     private val sessionStore: SessionStore,
     private val sessionGuard: SessionGuard,
     private val authRepository: AuthRepository,
+    private val pushTokens: PushTokens,
 ) : ViewModel() {
 
     private val _gate = MutableStateFlow(AuthGate.CHECKING)
@@ -50,6 +52,9 @@ class AuthGateViewModel @Inject constructor(
 
             _gate.value = AuthGate.SIGNED_IN
             watchSession(firebaseUser.uid)
+            // Tokens are rotated by Firebase and dropped when app data is
+            // cleared, so the server copy is refreshed on every start.
+            pushTokens.register()
         }
     }
 
@@ -68,6 +73,7 @@ class AuthGateViewModel @Inject constructor(
     fun onSignedIn() {
         _gate.value = AuthGate.SIGNED_IN
         auth.currentUser?.uid?.let(::watchSession)
+        viewModelScope.launch { pushTokens.register() }
     }
 
     fun acknowledgeSignedOutElsewhere() {
@@ -76,6 +82,9 @@ class AuthGateViewModel @Inject constructor(
 
     fun signOut() {
         viewModelScope.launch {
+            // Before the sign out, while the write is still permitted: a
+            // signed out device must stop receiving this account's pushes.
+            auth.currentUser?.uid?.let { pushTokens.clear(it) }
             authRepository.signOut()
             _gate.value = AuthGate.SIGNED_OUT
         }

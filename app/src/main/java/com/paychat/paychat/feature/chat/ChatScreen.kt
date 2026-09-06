@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.theme.AmountStyle
@@ -75,6 +76,13 @@ fun ChatScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val playback = rememberVoicePlayback()
     val context = LocalContext.current
+
+    // A push for the chat being read is suppressed, so the screen has to say
+    // when it is the one on top.
+    LifecycleResumeEffect(Unit) {
+        viewModel.screenResumed()
+        onPauseOrDispose { viewModel.screenPaused() }
+    }
 
     var showAttachments by remember { mutableStateOf(false) }
     var pendingCapture by remember { mutableStateOf<Pair<String, File>?>(null) }

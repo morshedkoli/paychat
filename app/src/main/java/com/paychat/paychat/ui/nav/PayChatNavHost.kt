@@ -41,6 +41,8 @@ import com.paychat.paychat.ui.screens.PlaceholderScreen
 @Composable
 fun PayChatNavHost(
     navController: NavHostController,
+    openThreadId: String? = null,
+    onThreadOpened: () -> Unit = {},
     authGateViewModel: AuthGateViewModel = hiltViewModel(),
 ) {
     val gate by authGateViewModel.gate.collectAsStateWithLifecycle()
@@ -56,6 +58,15 @@ fun PayChatNavHost(
                 if (navController.currentDestination?.route !in Routes.AUTH_ROUTES) {
                     navController.toTopLevel(Routes.LOGIN)
                 }
+        }
+    }
+
+    // A tapped notification names a conversation, but it can only be opened
+    // once the gate has decided the user is signed in.
+    LaunchedEffect(openThreadId, gate) {
+        if (openThreadId != null && gate == AuthGate.SIGNED_IN) {
+            navController.navigate(Routes.chat(openThreadId)) { launchSingleTop = true }
+            onThreadOpened()
         }
     }
 

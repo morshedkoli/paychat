@@ -12,6 +12,7 @@ import com.paychat.paychat.data.local.entity.MessageEntity
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.media.MediaFiles
 import com.paychat.paychat.data.media.VoiceRecorder
+import com.paychat.paychat.data.notifications.VisibleThread
 import com.paychat.paychat.data.transactions.TransactionRepository
 import com.paychat.paychat.ui.nav.NavArgs
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,6 +53,7 @@ class ChatViewModel @Inject constructor(
     private val mediaFiles: MediaFiles,
     private val voiceRecorder: VoiceRecorder,
     private val transactions: TransactionRepository,
+    private val visibleThread: VisibleThread,
     auth: AuthRepository,
 ) : ViewModel() {
 
@@ -106,6 +108,20 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
+
+    // ------------------------------------------------------- notifications
+
+    /**
+     * Tied to the screen resuming rather than to this ViewModel, so a chat
+     * left open behind another app still raises notifications.
+     */
+    fun screenResumed() {
+        visibleThread.opened(threadId)
+        // The screen may have been away while messages arrived.
+        viewModelScope.launch { chat.markRead(threadId) }
+    }
+
+    fun screenPaused() = visibleThread.closed(threadId)
 
     // ----------------------------------------------------------- transactions
 

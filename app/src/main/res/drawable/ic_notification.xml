@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icons are drawn as a silhouette, so this is a solid shape. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,2H4A2,2 0,0 0,2 4v18l4,-4h14a2,2 0,0 0,2 -2V4A2,2 0,0 0,20 2zM13,12h-2v2H9v-2H7v-2h2V8h2v2h2v2z" />
+</vector>
