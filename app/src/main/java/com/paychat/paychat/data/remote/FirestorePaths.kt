@@ -59,6 +59,28 @@ object MessageFields {
     const val READ_BY = "readBy"
 }
 
+object TransactionFields {
+    const val CREATED_BY = "createdBy"
+    const val DIRECTION = "direction"
+    const val AMOUNT_MINOR = "amountMinor"
+    const val NOTE = "note"
+    const val PHOTO_URL = "photoUrl"
+    const val PHOTO_PUBLIC_ID = "photoPublicId"
+    const val DUE_DATE = "dueDate"
+    const val STATUS = "status"
+    const val UNCONFIRMED = "unconfirmed"
+    const val REVERSES_ID = "reversesId"
+    const val REVERSED_BY = "reversedBy"
+    const val CREATED_AT = "createdAt"
+    const val RESOLVED_AT = "resolvedAt"
+    const val RESOLVED_BY = "resolvedBy"
+}
+
+object ThreadBalanceFields {
+    const val AMOUNT_MINOR = "amountMinor"
+    const val UPDATED_AT = "updatedAt"
+}
+
 object LastMessageFields {
     const val TEXT = "text"
     const val TYPE = "type"

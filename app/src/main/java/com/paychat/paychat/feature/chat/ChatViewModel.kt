@@ -9,8 +9,10 @@ import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.chat.ChatRepository
 import com.paychat.paychat.data.local.entity.MessageEntity
+import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.media.MediaFiles
 import com.paychat.paychat.data.media.VoiceRecorder
+import com.paychat.paychat.data.transactions.TransactionRepository
 import com.paychat.paychat.ui.nav.NavArgs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +35,8 @@ data class ChatUiState(
     val balance: Money = Money.ZERO,
     /** Newest first, which is the order the list renders in. */
     val messages: List<MessageEntity> = emptyList(),
+    /** The transaction each TXN message points at, keyed by its id. */
+    val transactions: Map<String, TransactionEntity> = emptyMap(),
     val draft: String = "",
     /** Set while a voice message is being recorded. */
     val recordingMessageId: String? = null,
@@ -47,6 +51,7 @@ class ChatViewModel @Inject constructor(
     private val chat: ChatRepository,
     private val mediaFiles: MediaFiles,
     private val voiceRecorder: VoiceRecorder,
+    private val transactions: TransactionRepository,
     auth: AuthRepository,
 ) : ViewModel() {
 
@@ -78,10 +83,38 @@ class ChatViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            transactions.observeThread(threadId).collect { rows ->
+                _state.update { state ->
+                    state.copy(transactions = rows.associateBy { it.txnId })
+                }
+            }
+        }
+
+        viewModelScope.launch {
             chat.syncMessages(threadId).collect { incoming ->
                 chat.persist(incoming)
                 // Anything that arrived while the screen is open counts as read.
                 chat.markRead(threadId)
+            }
+        }
+
+        viewModelScope.launch {
+            transactions.syncTransactions(threadId).collect { incoming ->
+                transactions.persist(threadId, incoming)
+            }
+        }
+    }
+
+    // ----------------------------------------------------------- transactions
+
+    fun acceptTransaction(txnId: String) = actOnTransaction { transactions.accept(txnId) }
+    fun rejectTransaction(txnId: String) = actOnTransaction { transactions.reject(txnId) }
+    fun cancelTransaction(txnId: String) = actOnTransaction { transactions.cancel(txnId) }
+
+    private fun actOnTransaction(block: suspend () -> Result<Unit>) {
+        viewModelScope.launch {
+            block().onFailure { error ->
+                _state.update { it.copy(error = error.message ?: "That did not work.") }
             }
         }
     }

@@ -126,6 +126,18 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE txnId = :txnId")
     fun observe(txnId: String): Flow<TransactionEntity?>
 
+    @Query("SELECT * FROM transactions WHERE txnId = :txnId LIMIT 1")
+    suspend fun byId(txnId: String): TransactionEntity?
+
+    @Query("UPDATE transactions SET syncState = :state WHERE txnId = :txnId")
+    suspend fun setSyncState(txnId: String, state: SyncState)
+
+    @Query(
+        "UPDATE transactions SET photoUrl = :url, photoPublicId = :publicId, " +
+            "localPhotoPath = NULL WHERE txnId = :txnId"
+    )
+    suspend fun setPhoto(txnId: String, url: String, publicId: String)
+
     @Query("SELECT * FROM transactions WHERE unconfirmed = 1 ORDER BY createdAt ASC")
     fun observeUnconfirmed(): Flow<List<TransactionEntity>>
 

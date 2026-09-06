@@ -28,6 +28,8 @@ import com.paychat.paychat.feature.contacts.AddContactScreen
 import com.paychat.paychat.feature.chat.ChatScreen
 import com.paychat.paychat.feature.contacts.ContactsScreen
 import com.paychat.paychat.feature.home.HomeScreen
+import com.paychat.paychat.feature.transaction.AddTransactionScreen
+import com.paychat.paychat.feature.transaction.TransactionDetailScreen
 import com.paychat.paychat.ui.screens.PlaceholderScreen
 
 /**
@@ -143,19 +145,25 @@ fun PayChatNavHost(
                         navController.navigate(Routes.addTransaction(threadId))
                     },
                     onOpenLedger = { threadId -> navController.navigate(Routes.ledger(threadId)) },
+                    onOpenTransaction = { txnId ->
+                        navController.navigate(Routes.transactionDetail(txnId))
+                    },
                 )
             }
             composable(
                 Routes.ADD_TRANSACTION,
                 arguments = listOf(navArgument(NavArgs.THREAD_ID) { type = NavType.StringType })
             ) {
-                PlaceholderScreen("New transaction", "Phase 5", navController)
+                AddTransactionScreen(
+                    onSaved = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(
                 Routes.TRANSACTION_DETAIL,
                 arguments = listOf(navArgument(NavArgs.TXN_ID) { type = NavType.StringType })
             ) {
-                PlaceholderScreen("Transaction", "Phase 5", navController)
+                TransactionDetailScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Routes.LEDGER,

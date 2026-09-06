@@ -67,6 +67,7 @@ fun ChatScreen(
     onBack: () -> Unit,
     onAddTransaction: (String) -> Unit,
     onOpenLedger: (String) -> Unit,
+    onOpenTransaction: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -186,11 +187,23 @@ fun ChatScreen(
                 reverseLayout = true,
             ) {
                 items(state.messages, key = { it.messageId }) { message ->
-                    MessageBubble(
-                        message = message,
-                        viewerUid = state.viewerUid,
-                        playback = playback,
-                    )
+                    val transaction = message.txnId?.let(state.transactions::get)
+                    if (transaction != null) {
+                        TransactionBubble(
+                            transaction = transaction,
+                            viewerUid = state.viewerUid,
+                            onOpen = { onOpenTransaction(transaction.txnId) },
+                            onAccept = { viewModel.acceptTransaction(transaction.txnId) },
+                            onReject = { viewModel.rejectTransaction(transaction.txnId) },
+                            onCancel = { viewModel.cancelTransaction(transaction.txnId) },
+                        )
+                    } else {
+                        MessageBubble(
+                            message = message,
+                            viewerUid = state.viewerUid,
+                            playback = playback,
+                        )
+                    }
                 }
             }
 

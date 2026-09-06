@@ -7,9 +7,9 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 4 — media. Authentication, contacts and chat are complete, and messages
-can now carry a photo or a voice note. Remaining screens are placeholders that
-name the phase which replaces them.
+Phase 5 — transactions. The ledger works: money can be recorded in a chat,
+accepted, rejected, cancelled and corrected, and the balances are live.
+Remaining screens are placeholders that name the phase which replaces them.
 
 The typing indicator listed in the specification is not built yet: it needs
 presence writes on every keystroke, which is worth designing alongside the
@@ -25,9 +25,40 @@ Implemented and unit tested:
 - `data/auth/` — registration, sign in, password reset
 - `data/contacts/` — address book sync, account discovery, local contacts
 - `data/chat/` — messages, threads, receipts
+- `core/ledger/TransactionRules.kt` — who may accept, reject, cancel, correct
 - `data/media/` — photo and voice capture, signed Cloudinary upload
+- `data/transactions/` — recording, settling, correcting, balance recomputation
 - `data/sync/` — offline outbox
 - `firebase/firestore.rules` — every ledger invariant from the spec
+
+## How the ledger works
+
+A transaction is written from its author's point of view. `SENT` ("I gave you
+money") raises what the other person owes, so it starts `PENDING` and they have
+to accept it. `RECEIVED` ("I got money from you") only lowers what they owe, so
+it applies immediately — there is nothing to protect them from. On a one-sided
+thread with someone who has not registered, both directions apply at once and
+are marked unconfirmed until that person joins.
+
+An accepted transaction is never edited or deleted. Correcting one adds an
+opposite entry pointing back at the original, which stays visible marked as
+corrected, so the history remains auditable and both people can see what
+changed.
+
+The balance is never the authority. It is recomputed from the transaction rows
+after every change and cached on the thread row for the lists, and it is always
+derivable again. `BalanceCalculator.viewerIsPayer` is the single place that
+decides who handed money over, so the interface can say "you gave" on one
+screen and "you received" on the other without the two disagreeing.
+
+`TransactionRules` holds the same rules the security rules enforce, so the
+interface can grey out an action instead of letting the user tap it and get a
+permission error. The server stays the authority; that copy is for the
+interface, never for trust.
+
+The client re-uploads a transaction in full on every retry, so the rules allow
+a write that changes nothing. Without that, a retry after a write that
+succeeded but whose response never arrived would be denied for ever.
 
 ## How attachments work
 
@@ -171,7 +202,8 @@ files and exhaust the quota.
 ./gradlew testDebugUnitTest
 ```
 
-67 unit tests cover the money arithmetic, the balance rules, phone
+78 unit tests cover the money arithmetic, the balance and transaction rules,
+phone
 normalisation, thread ids, input validation, address book normalisation,
 receipt mapping, upload request assembly, and timestamp formatting.
 

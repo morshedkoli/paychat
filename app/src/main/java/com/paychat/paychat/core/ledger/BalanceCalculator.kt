@@ -40,13 +40,28 @@ object BalanceCalculator {
         // but still count for the person who recorded them.
         if (entry.unconfirmed && entry.createdBy != viewerUid) return Money.ZERO
 
+        return if (viewerIsPayer(entry, viewerUid)) {
+            Money(entry.amountMinor)
+        } else {
+            Money(-entry.amountMinor)
+        }
+    }
+
+    /**
+     * Whether [viewerUid] is the one who handed the money over.
+     *
+     * Direction is written from the author's point of view, so the answer
+     * flips depending on who is reading. This is also what the interface needs
+     * in order to say "you gave" rather than "I gave" on the other person's
+     * screen, and it holds whatever the status is — a rejected claim still
+     * says who it claimed had paid.
+     */
+    fun viewerIsPayer(entry: LedgerEntry, viewerUid: String): Boolean {
         val viewerIsAuthor = entry.createdBy == viewerUid
-        val viewerIsPayer = when (entry.direction) {
+        return when (entry.direction) {
             TxnDirection.SENT -> viewerIsAuthor
             TxnDirection.RECEIVED -> !viewerIsAuthor
         }
-
-        return if (viewerIsPayer) Money(entry.amountMinor) else Money(-entry.amountMinor)
     }
 
     /** Net balance of a whole conversation, from [viewerUid]'s point of view. */

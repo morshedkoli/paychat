@@ -8,9 +8,12 @@ import com.paychat.paychat.core.model.MessageType
 import com.paychat.paychat.core.model.SyncState
 import com.paychat.paychat.data.chat.ChatRepository
 import com.paychat.paychat.data.local.dao.MessageDao
+import com.paychat.paychat.data.local.dao.TransactionDao
 import com.paychat.paychat.data.local.entity.MessageEntity
+import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.media.MediaFiles
 import com.paychat.paychat.data.media.MediaUploader
+import com.paychat.paychat.data.transactions.TransactionRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.io.File
@@ -28,15 +31,43 @@ class OutboxWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val messageDao: MessageDao,
+    private val transactionDao: TransactionDao,
     private val chatRepository: ChatRepository,
+    private val transactionRepository: TransactionRepository,
     private val mediaUploader: MediaUploader,
     private val mediaFiles: MediaFiles,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val pending = messageDao.awaitingSync(listOf(SyncState.PENDING, SyncState.FAILED))
-        if (pending.isEmpty()) return Result.success()
+        val waiting = listOf(SyncState.PENDING, SyncState.FAILED)
 
+        // Transactions go first. A message of type TXN is only a pointer at
+        // one, so uploading the message first would briefly show the other
+        // person a transaction that cannot be loaded.
+        var anyFailed = uploadTransactions(transactionDao.awaitingSync(waiting))
+        anyFailed = uploadMessages(messageDao.awaitingSync(waiting)) || anyFailed
+
+        // Retrying is WorkManager's job; it applies the backoff configured by
+        // the scheduler rather than us looping here.
+        return if (anyFailed) Result.retry() else Result.success()
+    }
+
+    private suspend fun uploadTransactions(pending: List<TransactionEntity>): Boolean {
+        var anyFailed = false
+        for (transaction in pending) {
+            transactionDao.setSyncState(transaction.txnId, SyncState.UPLOADING)
+            runCatching { send(transaction) }.fold(
+                onSuccess = { transactionDao.setSyncState(transaction.txnId, SyncState.SYNCED) },
+                onFailure = {
+                    transactionDao.setSyncState(transaction.txnId, SyncState.FAILED)
+                    anyFailed = true
+                },
+            )
+        }
+        return anyFailed
+    }
+
+    private suspend fun uploadMessages(pending: List<MessageEntity>): Boolean {
         var anyFailed = false
         for (message in pending) {
             messageDao.setSyncState(message.messageId, SyncState.UPLOADING)
@@ -48,10 +79,31 @@ class OutboxWorker @AssistedInject constructor(
                 },
             )
         }
+        return anyFailed
+    }
 
-        // Retrying is WorkManager's job; it applies the backoff configured by
-        // the scheduler rather than us looping here.
-        return if (anyFailed) Result.retry() else Result.success()
+    /** A receipt photo follows the same order as a chat attachment. */
+    private suspend fun send(transaction: TransactionEntity) {
+        var toSend = transaction
+
+        if (transaction.photoUrl == null && !transaction.localPhotoPath.isNullOrEmpty()) {
+            val localPath = transaction.localPhotoPath
+            val uploaded = mediaUploader.upload(
+                file = File(localPath),
+                messageId = transaction.txnId,
+                isVoice = false,
+            ).getOrThrow()
+
+            transactionDao.setPhoto(transaction.txnId, uploaded.secureUrl, uploaded.publicId)
+            toSend = transaction.copy(
+                photoUrl = uploaded.secureUrl,
+                photoPublicId = uploaded.publicId,
+                localPhotoPath = null,
+            )
+            mediaFiles.discard(localPath)
+        }
+
+        transactionRepository.upload(toSend)
     }
 
     /**

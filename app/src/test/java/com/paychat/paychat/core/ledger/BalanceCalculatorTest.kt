@@ -4,6 +4,8 @@ import com.paychat.paychat.core.model.TxnDirection
 import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private const val ALICE = "uid_alice"
@@ -74,6 +76,22 @@ class BalanceCalculatorTest {
             listOf(Money(10_000), Money(15_000), Money(12_000)),
             BalanceCalculator.runningBalance(entries, ALICE)
         )
+    }
+
+    @Test
+    fun `who paid is read from the direction, not from the balance`() {
+        // A rejected claim still said who it claimed had paid, so the wording
+        // in the interface must not depend on whether it counts.
+        val rejected = Entry(ALICE, TxnDirection.SENT, 10_000, status = TxnStatus.REJECTED)
+        assertTrue(BalanceCalculator.viewerIsPayer(rejected, ALICE))
+        assertFalse(BalanceCalculator.viewerIsPayer(rejected, BOB))
+    }
+
+    @Test
+    fun `each side reads the same entry from their own side`() {
+        val received = Entry(ALICE, TxnDirection.RECEIVED, 10_000)
+        assertFalse(BalanceCalculator.viewerIsPayer(received, ALICE))
+        assertTrue(BalanceCalculator.viewerIsPayer(received, BOB))
     }
 
     @Test

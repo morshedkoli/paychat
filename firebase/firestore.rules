@@ -157,8 +157,15 @@ service cloud.firestore {
         allow update: if inThread()
                       && immutableFieldsUnchanged()
                       && (
+                        // Writing exactly what is already stored changes
+                        // nothing and is always allowed. The client uploads
+                        // the whole transaction on every retry, so without
+                        // this a retry after a successful write that the
+                        // client never heard about would be denied for ever.
+                        incoming().diff(existing()).affectedKeys().size() == 0
+
                         // The counterparty accepts or rejects a pending item.
-                        (existing().status == 'PENDING'
+                        || (existing().status == 'PENDING'
                           && existing().createdBy != uid()
                           && incoming().status in ['ACCEPTED', 'REJECTED']
                           && incoming().resolvedBy == uid())
