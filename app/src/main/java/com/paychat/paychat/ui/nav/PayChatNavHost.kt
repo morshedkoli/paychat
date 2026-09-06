@@ -31,13 +31,12 @@ import com.paychat.paychat.feature.home.HomeScreen
 import com.paychat.paychat.feature.inherited.InheritedReviewScreen
 import com.paychat.paychat.feature.ledger.LedgerScreen
 import com.paychat.paychat.feature.search.SearchScreen
+import com.paychat.paychat.feature.settings.SettingsScreen
 import com.paychat.paychat.feature.transaction.AddTransactionScreen
 import com.paychat.paychat.feature.transaction.TransactionDetailScreen
-import com.paychat.paychat.ui.screens.PlaceholderScreen
 
 /**
- * Navigation skeleton. Screens are filled in phase by phase; each placeholder
- * names the phase that replaces it.
+ * Every destination in the app.
  */
 @Composable
 fun PayChatNavHost(
@@ -211,7 +210,10 @@ fun PayChatNavHost(
                 )
             }
             composable(Routes.SETTINGS) {
-                PlaceholderScreen("Settings", "Phase 9", navController)
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onSignOut = authGateViewModel::signOut,
+                )
             }
         }
 

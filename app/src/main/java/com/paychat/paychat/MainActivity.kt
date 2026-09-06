@@ -18,10 +18,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.paychat.paychat.data.notifications.PayChatMessagingService
+import com.paychat.paychat.data.settings.ThemeChoice
+import com.paychat.paychat.feature.settings.AppShellViewModel
 import com.paychat.paychat.ui.nav.PayChatNavHost
 import com.paychat.paychat.ui.theme.PayChatTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -42,7 +47,10 @@ class MainActivity : ComponentActivity() {
         readThreadFrom(intent)
 
         setContent {
-            PayChatTheme {
+            val shell: AppShellViewModel = hiltViewModel()
+            val theme by shell.theme.collectAsStateWithLifecycle()
+
+            PayChatTheme(darkTheme = theme.isDark()) {
                 RequestNotificationPermission()
                 val threadId by openThread.collectAsState()
                 Surface(
@@ -94,4 +102,12 @@ private fun RequestNotificationPermission() {
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
+}
+
+/** Whether this choice means dark colours right now. */
+@Composable
+private fun ThemeChoice.isDark(): Boolean = when (this) {
+    ThemeChoice.SYSTEM -> isSystemInDarkTheme()
+    ThemeChoice.LIGHT -> false
+    ThemeChoice.DARK -> true
 }
