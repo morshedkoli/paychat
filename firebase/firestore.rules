@@ -204,12 +204,15 @@ service cloud.firestore {
                  : incoming().status == 'ACCEPTED');
         }
 
+        // Optional fields are read with a default. Comparing a field that
+        // is absent from one side throws, which would deny the write for a
+        // reason that has nothing to do with what it was trying to do.
         function immutableFieldsUnchanged() {
           return incoming().createdBy == existing().createdBy
               && incoming().direction == existing().direction
               && incoming().amountMinor == existing().amountMinor
               && incoming().createdAt == existing().createdAt
-              && incoming().reversesId == existing().reversesId;
+              && incoming().get('reversesId', null) == existing().get('reversesId', null);
         }
 
         allow read: if inThread();
@@ -247,14 +250,14 @@ service cloud.firestore {
                         // The inheriting user reviews unconfirmed history.
                         // Only they may clear the flag, and only on a row they
                         // did not write themselves.
-                        || (existing().unconfirmed == true
+                        || (existing().get('unconfirmed', false) == true
                           && existing().createdBy != uid()
                           && incoming().unconfirmed == false
                           && incoming().status in ['ACCEPTED', 'REJECTED'])
 
                         // Marking an entry as reversed by a later entry.
                         || (existing().status == 'ACCEPTED'
-                          && existing().reversedBy == null
+                          && existing().get('reversedBy', null) == null
                           && incoming().status == 'ACCEPTED'
                           && incoming().reversedBy is string
                           && incoming().diff(existing()).affectedKeys()
