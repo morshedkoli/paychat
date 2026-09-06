@@ -346,7 +346,7 @@ recompute and treated as advisory.
 
 ## 10. Decisions
 
-- **Application id** — `com.paychat.koli`. **App name** — PayChat.
+- **Application id** — `com.paychat.paychat`. **App name** — PayChat.
 - **Password reset** — OTP based. The user enters their phone number, verifies
   by OTP, then sets a new password. Handled in phase 1.
 - **Multi-device** — one active device per account. Signing in on a new device

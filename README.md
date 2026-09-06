@@ -133,8 +133,10 @@ wrapper (8.11.1) is checked in.
 ## Firebase setup
 
 1. Create a Firebase project and add an Android app with package name
-   `com.paychat.koli`. Add a second app for `com.paychat.koli.debug` — the
-   debug build uses that suffix.
+   `com.paychat.paychat`. Debug and release share that application id, so one
+   registration covers both. Adding an `applicationIdSuffix` to the debug build
+   would need a second Firebase app registered for it, or phone auth stops
+   working on debug builds.
 2. Register the SHA-1 and SHA-256 of your debug and release signing keys.
    Phone authentication will not work without them.
 3. Enable **Authentication** providers: Phone, and Email/Password.

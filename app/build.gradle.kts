@@ -17,11 +17,11 @@ val localProps = Properties().apply {
 }
 
 android {
-    namespace = "com.paychat.koli"
+    namespace = "com.paychat.paychat"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.paychat.koli"
+        applicationId = "com.paychat.paychat"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -42,7 +42,11 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
+            // No applicationIdSuffix: the Firebase project registers only
+            // com.paychat.paychat, and phone auth checks the package name
+            // against that registration. Add a second Firebase app for
+            // com.paychat.paychat.debug before reintroducing a suffix, or
+            // debug builds will fail to send an OTP.
             isMinifyEnabled = false
         }
         release {
