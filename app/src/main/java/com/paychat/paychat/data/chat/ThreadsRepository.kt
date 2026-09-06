@@ -5,7 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.local.dao.MessageDao
 import com.paychat.paychat.data.local.dao.ThreadDao
-import com.paychat.paychat.data.local.dao.UnreadCount
+import com.paychat.paychat.data.local.dao.ThreadCount
 import com.paychat.paychat.data.local.dao.UserDao
 import com.paychat.paychat.data.local.entity.ThreadEntity
 import com.paychat.paychat.data.local.entity.UserEntity
@@ -36,7 +36,7 @@ class ThreadsRepository @Inject constructor(
 
     fun observeThreads(): Flow<List<ThreadEntity>> = threadDao.observeAll()
 
-    fun observeUnreadCounts(): Flow<List<UnreadCount>> {
+    fun observeUnreadCounts(): Flow<List<ThreadCount>> {
         val uid = auth.currentUid ?: return flowOf(emptyList())
         return messageDao.observeUnreadCounts(uid)
     }

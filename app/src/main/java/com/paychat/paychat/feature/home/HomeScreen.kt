@@ -23,7 +23,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,6 +48,7 @@ fun HomeScreen(
     onOpenThread: (String) -> Unit,
     onNewChat: () -> Unit,
     onSettings: () -> Unit,
+    onReviewInherited: (String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -74,6 +77,15 @@ fun HomeScreen(
                 willGet = state.summary.willGet,
                 willGive = state.summary.willGive,
             )
+
+            if (state.inheritedCount > 0) {
+                InheritedBanner(
+                    count = state.inheritedCount,
+                    onReview = {
+                        state.inheritedThreadIds.firstOrNull()?.let(onReviewInherited)
+                    },
+                )
+            }
 
             HorizontalDivider()
 
@@ -160,8 +172,11 @@ private fun ThreadListItem(thread: ThreadRow, onClick: () -> Unit) {
         },
         supportingContent = {
             Text(
-                text = thread.lastMessage.ifBlank {
-                    if (thread.isLocal) "Not on PayChat yet" else "No messages yet"
+                text = when {
+                    thread.awaitingConfirmation -> "Waiting for them to confirm your records"
+                    thread.lastMessage.isNotBlank() -> thread.lastMessage
+                    thread.isLocal -> "Not on PayChat yet"
+                    else -> "No messages yet"
                 },
                 maxLines = 1,
             )
@@ -189,4 +204,40 @@ private fun ThreadListItem(thread: ThreadRow, onClick: () -> Unit) {
         },
         modifier = Modifier.clickable(onClick = onClick),
     )
+}
+
+/**
+ * Money someone recorded against this user's number before they registered.
+ * It counts for nobody until reviewed, so the banner stays until it is.
+ */
+@Composable
+private fun InheritedBanner(count: Int, onReview: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (count == 1) {
+                        "1 entry was recorded before you joined"
+                    } else {
+                        "$count entries were recorded before you joined"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    "They do not count until you review them.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+            TextButton(onClick = onReview) { Text("Review") }
+        }
+    }
 }

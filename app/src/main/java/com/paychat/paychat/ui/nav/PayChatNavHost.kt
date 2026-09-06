@@ -28,6 +28,7 @@ import com.paychat.paychat.feature.contacts.AddContactScreen
 import com.paychat.paychat.feature.chat.ChatScreen
 import com.paychat.paychat.feature.contacts.ContactsScreen
 import com.paychat.paychat.feature.home.HomeScreen
+import com.paychat.paychat.feature.inherited.InheritedReviewScreen
 import com.paychat.paychat.feature.ledger.LedgerScreen
 import com.paychat.paychat.feature.transaction.AddTransactionScreen
 import com.paychat.paychat.feature.transaction.TransactionDetailScreen
@@ -115,6 +116,9 @@ fun PayChatNavHost(
                     onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
                     onNewChat = { navController.navigate(Routes.CONTACTS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
+                    onReviewInherited = { threadId ->
+                        navController.navigate(Routes.inheritedReview(threadId))
+                    },
                 )
             }
             composable(Routes.CONTACTS) {
@@ -181,7 +185,7 @@ fun PayChatNavHost(
                 Routes.INHERITED_REVIEW,
                 arguments = listOf(navArgument(NavArgs.THREAD_ID) { type = NavType.StringType })
             ) {
-                PlaceholderScreen("Review inherited history", "Phase 7", navController)
+                InheritedReviewScreen(onBack = { navController.popBackStack() })
             }
 
             composable(Routes.SEARCH) {

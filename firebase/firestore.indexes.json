@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "threads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isLocal", "order": "ASCENDING" },
+        { "fieldPath": "localContact.phone", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "transactions",
       "queryScope": "COLLECTION",
       "fields": [

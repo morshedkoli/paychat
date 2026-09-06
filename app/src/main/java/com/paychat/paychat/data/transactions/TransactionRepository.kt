@@ -13,6 +13,7 @@ import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.local.dao.MessageDao
 import com.paychat.paychat.data.local.dao.ThreadBalanceDao
+import com.paychat.paychat.data.local.dao.ThreadCount
 import com.paychat.paychat.data.local.dao.ThreadDao
 import com.paychat.paychat.data.local.dao.TransactionDao
 import com.paychat.paychat.data.local.entity.MessageEntity
@@ -25,6 +26,8 @@ import com.paychat.paychat.data.sync.OutboxScheduler
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
@@ -153,6 +156,71 @@ class TransactionRepository @Inject constructor(
         recomputeBalance(original.threadId)
         outbox.schedule()
         reversalId
+    }
+
+    /**
+     * History someone recorded against this user's number before they joined.
+     *
+     * These entries already count for the person who wrote them, and count for
+     * nobody else until reviewed here. Accepting brings them into this user's
+     * balance; rejecting stops them counting for either side, which is the
+     * whole point of the review.
+     */
+    /**
+     * Entries this user recorded against someone who had not registered, still
+     * waiting for that person to confirm them once they joined.
+     */
+    fun observeAwaitingConfirmation(): Flow<List<ThreadCount>> {
+        val viewerUid = auth.currentUid ?: return flowOf(emptyList())
+        return transactionDao.observeAwaitingConfirmation(viewerUid)
+    }
+
+    fun observeInherited(): Flow<List<TransactionEntity>> {
+        val viewerUid = auth.currentUid ?: return flowOf(emptyList())
+        return transactionDao.observeUnconfirmed().map { rows ->
+            rows.filter { TransactionRules.canReviewInherited(it.unconfirmed, it.createdBy, viewerUid) }
+        }
+    }
+
+    suspend fun reviewInherited(txnId: String, accepted: Boolean): Result<Unit> = runCatching {
+        val viewerUid = auth.currentUid ?: error("not signed in")
+        val transaction = transactionDao.byId(txnId)
+            ?: error("that transaction is not on this device")
+
+        require(
+            TransactionRules.canReviewInherited(
+                transaction.unconfirmed,
+                transaction.createdBy,
+                viewerUid,
+            )
+        ) { "that entry is not yours to review" }
+
+        transactionDao.upsert(
+            transaction.copy(
+                status = if (accepted) TxnStatus.ACCEPTED else TxnStatus.REJECTED,
+                unconfirmed = false,
+                resolvedAt = System.currentTimeMillis(),
+                resolvedBy = viewerUid,
+                syncState = SyncState.PENDING,
+            )
+        )
+        recomputeBalance(transaction.threadId)
+        outbox.schedule()
+    }
+
+    /**
+     * Accepts every inherited entry in one conversation.
+     *
+     * Each is written separately rather than in a batch so that one entry the
+     * server refuses does not silently discard the rest.
+     */
+    suspend fun acceptAllInherited(threadId: String): Result<Int> = runCatching {
+        val viewerUid = auth.currentUid ?: error("not signed in")
+        val pending = transactionDao.forThread(threadId).filter {
+            TransactionRules.canReviewInherited(it.unconfirmed, it.createdBy, viewerUid)
+        }
+        pending.forEach { reviewInherited(it.txnId, accepted = true).getOrThrow() }
+        pending.size
     }
 
     private suspend fun resolve(

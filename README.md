@@ -7,11 +7,10 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 6 — statements. The ledger works end to end: money is recorded in a chat,
-accepted, rejected, cancelled or corrected; each conversation has a statement
-with a running balance; and the home screen shows real totals on a fresh
-install. Remaining screens are placeholders that name the phase which replaces
-them.
+Phase 7 — handover. The ledger works end to end, and money recorded against a
+phone number before its owner registered now follows them to their new
+account for review. Remaining screens are placeholders that name the phase
+which replaces them.
 
 The typing indicator listed in the specification is not built yet: it needs
 presence writes on every keystroke, which is worth designing alongside the
@@ -130,8 +129,28 @@ batches of 30 — the Firestore `whereIn` limit. The result is cached in Room.
 Numbers that leave the address book are dropped on the next sync.
 
 A number without an account can still be added by hand. That creates a local
-contact and a one-sided thread owned by the user alone, which becomes a real
-two-party thread when the number registers (phase 7).
+contact and a one-sided thread owned by the user alone.
+
+## The handover
+
+When that number finally registers, `attachHistoryOnRegistration` turns those
+one-sided threads into real two-party conversations. It triggers on the
+`phoneIndex` document rather than on the profile, because that is the write
+that claims a number and the rules only allow it for a number Firebase itself
+verified by OTP; triggering on the profile would fire before the number was
+proven.
+
+The transactions are not rewritten. They were created `unconfirmed` on a
+one-sided thread, which is already the state the review screen looks for, and
+rewriting them would mean touching an unbounded number of documents inside one
+trigger.
+
+Unconfirmed history counts for the person who wrote it and for nobody else, so
+**no one can load debt onto a phone number before its owner joins**. The new
+user reviews each entry: accepting brings it into their balance, rejecting
+stops it counting for either side, because a dispute that removed it from only
+one of them would leave the two permanently disagreeing. Until they decide,
+the original author sees the conversation marked as awaiting confirmation.
 
 ## How an account works
 
@@ -219,7 +238,7 @@ files and exhaust the quota.
 ./gradlew testDebugUnitTest
 ```
 
-84 unit tests cover the money arithmetic, the balance, statement and
+90 unit tests cover the money arithmetic, the balance, statement, handover and
 transaction rules,
 phone
 normalisation, thread ids, input validation, address book normalisation,

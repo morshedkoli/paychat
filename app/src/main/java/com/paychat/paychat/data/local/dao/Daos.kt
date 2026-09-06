@@ -15,8 +15,8 @@ import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.local.entity.UserEntity
 import kotlinx.coroutines.flow.Flow
 
-/** One row of [MessageDao.observeUnreadCounts]. */
-data class UnreadCount(
+/** A per-conversation tally, used by the list screens. */
+data class ThreadCount(
     val threadId: String,
     val count: Int,
 )
@@ -116,7 +116,7 @@ interface MessageDao {
         "SELECT threadId, COUNT(*) AS count FROM messages " +
             "WHERE senderId != :viewerUid AND readAt IS NULL GROUP BY threadId"
     )
-    fun observeUnreadCounts(viewerUid: String): Flow<List<UnreadCount>>
+    fun observeUnreadCounts(viewerUid: String): Flow<List<ThreadCount>>
 }
 
 @Dao
@@ -148,6 +148,16 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE unconfirmed = 1 ORDER BY createdAt ASC")
     fun observeUnconfirmed(): Flow<List<TransactionEntity>>
+
+    /**
+     * Entries this user recorded that the other person has not confirmed yet,
+     * counted per conversation.
+     */
+    @Query(
+        "SELECT threadId, COUNT(*) AS count FROM transactions " +
+            "WHERE unconfirmed = 1 AND createdBy = :viewerUid GROUP BY threadId"
+    )
+    fun observeAwaitingConfirmation(viewerUid: String): Flow<List<ThreadCount>>
 
     @Query("SELECT * FROM transactions WHERE syncState IN (:states)")
     suspend fun awaitingSync(states: List<SyncState>): List<TransactionEntity>

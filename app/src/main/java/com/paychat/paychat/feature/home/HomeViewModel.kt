@@ -27,11 +27,19 @@ data class ThreadRow(
     val unreadCount: Int,
     val balance: Money,
     val isLocal: Boolean,
+    /** This user recorded history the other person has not confirmed yet. */
+    val awaitingConfirmation: Boolean = false,
 )
 
 data class HomeUiState(
     val summary: BalanceSummary = BalanceSummary.EMPTY,
     val threads: List<ThreadRow> = emptyList(),
+    /**
+     * Conversations holding money someone recorded against this user's number
+     * before they registered, waiting to be reviewed.
+     */
+    val inheritedThreadIds: List<String> = emptyList(),
+    val inheritedCount: Int = 0,
     val loading: Boolean = true,
 )
 
@@ -52,13 +60,18 @@ class HomeViewModel @Inject constructor(
                 threads.observeThreads(),
                 threads.observeUnreadCounts(),
                 transactions.observeBalances(),
-            ) { rows, unread, balances ->
+                transactions.observeAwaitingConfirmation(),
+            ) { rows, unread, balances, awaiting ->
                 val unreadByThread = unread.associate { it.threadId to it.count }
                 val balanceByThread = balances.associate { it.threadId to Money(it.amountMinor) }
+                val awaitingThreads = awaiting.map { it.threadId }.toSet()
                 rows.map {
                     it.toRow(
                         unread = unreadByThread[it.threadId] ?: 0,
                         balance = balanceByThread[it.threadId] ?: Money.ZERO,
+                        // Only meaningful once the other person has an account;
+                        // before that there is nobody who could confirm.
+                        awaitingConfirmation = !it.isLocal && it.threadId in awaitingThreads,
                     )
                 }
             }.collect { rows ->
@@ -67,6 +80,17 @@ class HomeViewModel @Inject constructor(
                         threads = rows,
                         summary = BalanceCalculator.summarise(rows.map { row -> row.balance }),
                         loading = false,
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            transactions.observeInherited().collect { inherited ->
+                _state.update {
+                    it.copy(
+                        inheritedThreadIds = inherited.map { row -> row.threadId }.distinct(),
+                        inheritedCount = inherited.size,
                     )
                 }
             }
@@ -84,7 +108,11 @@ class HomeViewModel @Inject constructor(
     }
 }
 
-private fun ThreadEntity.toRow(unread: Int, balance: Money) = ThreadRow(
+private fun ThreadEntity.toRow(
+    unread: Int,
+    balance: Money,
+    awaitingConfirmation: Boolean,
+) = ThreadRow(
     threadId = threadId,
     name = peerName.ifBlank { peerPhone },
     phone = peerPhone,
@@ -94,4 +122,5 @@ private fun ThreadEntity.toRow(unread: Int, balance: Money) = ThreadRow(
     unreadCount = unread,
     balance = balance,
     isLocal = isLocal,
+    awaitingConfirmation = awaitingConfirmation,
 )
