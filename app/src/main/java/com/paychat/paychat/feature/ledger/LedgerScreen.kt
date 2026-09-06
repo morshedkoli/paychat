@@ -7,24 +7,32 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -34,6 +42,7 @@ import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.ui.components.Timestamps
+import com.paychat.paychat.ui.components.shareStatement
 import com.paychat.paychat.ui.theme.AmountLargeStyle
 import com.paychat.paychat.ui.theme.AmountStyle
 import com.paychat.paychat.ui.theme.PayChatTheme
@@ -47,6 +56,22 @@ fun LedgerScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val ledger = PayChatTheme.ledger
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.statement) {
+        state.statement?.let { uri ->
+            shareStatement(context, uri, "Statement — " + state.peerName)
+            viewModel.statementShared()
+        }
+    }
+
+    LaunchedEffect(state.error) {
+        state.error?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.errorShown()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -68,8 +93,21 @@ fun LedgerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(
+                        onClick = viewModel::exportStatement,
+                        enabled = !state.exporting && state.lines.isNotEmpty(),
+                    ) {
+                        if (state.exporting) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.Share, contentDescription = "Export statement")
+                        }
+                    }
+                },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
 

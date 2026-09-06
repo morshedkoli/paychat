@@ -3,4 +3,7 @@
     <!-- Only the outgoing attachment folder is shared, and only so the camera
          can write the photo the user just took. -->
     <files-path name="outgoing_media" path="media/outgoing/" />
+
+    <!-- Exported statements, which are shared straight from the cache. -->
+    <cache-path name="statements" path="statements/" />
 </paths>

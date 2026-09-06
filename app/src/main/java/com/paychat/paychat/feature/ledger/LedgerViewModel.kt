@@ -1,5 +1,6 @@
 package com.paychat.paychat.feature.ledger
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,7 @@ import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.chat.ChatRepository
+import com.paychat.paychat.data.export.StatementExporter
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.transactions.TransactionRepository
 import com.paychat.paychat.ui.nav.NavArgs
@@ -31,6 +33,10 @@ data class LedgerUiState(
     /** How many entries the filter is hiding, so nothing vanishes silently. */
     val hiddenCount: Int = 0,
     val loading: Boolean = true,
+    val exporting: Boolean = false,
+    /** Set once a statement is written, and cleared when it has been handed on. */
+    val statement: Uri? = null,
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -38,6 +44,7 @@ class LedgerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val transactions: TransactionRepository,
     private val chat: ChatRepository,
+    private val exporter: StatementExporter,
     auth: AuthRepository,
 ) : ViewModel() {
 
@@ -76,6 +83,35 @@ class LedgerViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * Writes this conversation's statement and hands back a shareable file.
+     *
+     * The work is a database read and some drawing, so it is quick, but it is
+     * still reported as in progress: a button that does nothing visible for a
+     * moment reads as broken.
+     */
+    fun exportStatement() {
+        if (_state.value.exporting) return
+        _state.update { it.copy(exporting = true, error = null) }
+
+        viewModelScope.launch {
+            exporter.exportThread(threadId)
+                .onSuccess { uri -> _state.update { it.copy(exporting = false, statement = uri) } }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            exporting = false,
+                            error = error.message ?: "Could not create that statement.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun statementShared() = _state.update { it.copy(statement = null) }
+
+    fun errorShown() = _state.update { it.copy(error = null) }
 
     /** Shows or hides the entries that came to nothing. */
     fun toggleSettled() {

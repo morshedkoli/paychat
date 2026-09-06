@@ -46,6 +46,9 @@ interface ThreadDao {
     @Query("SELECT * FROM threads ORDER BY lastMessageAt DESC")
     fun observeAll(): Flow<List<ThreadEntity>>
 
+    @Query("SELECT * FROM threads ORDER BY lastMessageAt DESC")
+    suspend fun all(): List<ThreadEntity>
+
     @Query("SELECT * FROM threads WHERE threadId = :threadId")
     fun observe(threadId: String): Flow<ThreadEntity?>
 

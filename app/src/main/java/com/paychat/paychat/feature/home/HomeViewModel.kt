@@ -1,11 +1,13 @@
 package com.paychat.paychat.feature.home
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.paychat.paychat.core.ledger.BalanceCalculator
 import com.paychat.paychat.core.ledger.BalanceSummary
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.chat.ThreadsRepository
+import com.paychat.paychat.data.export.StatementExporter
 import com.paychat.paychat.data.local.entity.ThreadEntity
 import com.paychat.paychat.data.transactions.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,12 +43,17 @@ data class HomeUiState(
     val inheritedThreadIds: List<String> = emptyList(),
     val inheritedCount: Int = 0,
     val loading: Boolean = true,
+    val exporting: Boolean = false,
+    /** Set once a statement is written, and cleared when it has been handed on. */
+    val statement: Uri? = null,
+    val error: String? = null,
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val threads: ThreadsRepository,
     private val transactions: TransactionRepository,
+    private val exporter: StatementExporter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -106,6 +113,34 @@ class HomeViewModel @Inject constructor(
             transactions.syncBalances().collect { transactions.persistBalances(it) }
         }
     }
+
+    /**
+     * Writes one statement covering every conversation.
+     *
+     * Conversations with no accepted money in them are left out rather than
+     * printed empty: the point of the document is what was actually settled.
+     */
+    fun exportEverything() {
+        if (_state.value.exporting) return
+        _state.update { it.copy(exporting = true, error = null) }
+
+        viewModelScope.launch {
+            exporter.exportAll()
+                .onSuccess { uri -> _state.update { it.copy(exporting = false, statement = uri) } }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            exporting = false,
+                            error = error.message ?: "Could not create that statement.",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun statementShared() = _state.update { it.copy(statement = null) }
+
+    fun errorShown() = _state.update { it.copy(error = null) }
 }
 
 private fun ThreadEntity.toRow(
