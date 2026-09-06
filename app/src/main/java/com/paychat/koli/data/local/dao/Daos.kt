@@ -14,6 +14,12 @@ import com.paychat.koli.data.local.entity.TransactionEntity
 import com.paychat.koli.data.local.entity.UserEntity
 import kotlinx.coroutines.flow.Flow
 
+/** One row of [MessageDao.observeUnreadCounts]. */
+data class UnreadCount(
+    val threadId: String,
+    val count: Int,
+)
+
 @Dao
 interface UserDao {
     @Upsert suspend fun upsert(user: UserEntity)
@@ -25,6 +31,9 @@ interface UserDao {
 
     @Query("SELECT * FROM users WHERE phone = :phone LIMIT 1")
     suspend fun byPhone(phone: String): UserEntity?
+
+    @Query("SELECT * FROM users WHERE uid = :uid LIMIT 1")
+    suspend fun byUid(uid: String): UserEntity?
 }
 
 @Dao
@@ -42,11 +51,23 @@ interface ThreadDao {
     @Query("SELECT * FROM threads WHERE peerPhone = :phone LIMIT 1")
     suspend fun byPhone(phone: String): ThreadEntity?
 
+    @Query("SELECT * FROM threads WHERE threadId = :threadId LIMIT 1")
+    suspend fun byId(threadId: String): ThreadEntity?
+
     @Query("UPDATE threads SET balanceMinor = :minor, updatedAt = :now WHERE threadId = :threadId")
     suspend fun setBalance(threadId: String, minor: Long, now: Long)
 
     @Query("SELECT balanceMinor FROM threads")
     fun observeAllBalances(): Flow<List<Long>>
+
+    @Query(
+        """
+        UPDATE threads
+        SET lastMessageText = :preview, lastMessageAt = :at, updatedAt = :at
+        WHERE threadId = :threadId
+        """
+    )
+    suspend fun setLastMessage(threadId: String, preview: String, at: Long)
 }
 
 @Dao
@@ -59,11 +80,28 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE threadId = :threadId ORDER BY createdAt DESC")
     fun observeThread(threadId: String): Flow<List<MessageEntity>>
 
-    @Query("SELECT * FROM messages WHERE syncState IN (:states)")
+    @Query("SELECT * FROM messages WHERE syncState IN (:states) ORDER BY createdAt ASC")
     suspend fun awaitingSync(states: List<SyncState>): List<MessageEntity>
 
     @Query("UPDATE messages SET syncState = :state WHERE messageId = :messageId")
     suspend fun setSyncState(messageId: String, state: SyncState)
+
+    /** Messages from other people that the user has not opened yet. */
+    @Query(
+        "SELECT * FROM messages WHERE threadId = :threadId AND senderId != :viewerUid " +
+            "AND readAt IS NULL"
+    )
+    suspend fun unreadFrom(threadId: String, viewerUid: String): List<MessageEntity>
+
+    @Query("UPDATE messages SET readAt = :at WHERE messageId IN (:messageIds)")
+    suspend fun markRead(messageIds: List<String>, at: Long)
+
+    /** Unread totals for the thread list, keyed by thread. */
+    @Query(
+        "SELECT threadId, COUNT(*) AS count FROM messages " +
+            "WHERE senderId != :viewerUid AND readAt IS NULL GROUP BY threadId"
+    )
+    fun observeUnreadCounts(viewerUid: String): Flow<List<UnreadCount>>
 }
 
 @Dao

@@ -42,6 +42,30 @@ object ThreadFields {
     const val UPDATED_AT = "updatedAt"
 }
 
+object MessageFields {
+    const val SENDER_ID = "senderId"
+    const val TYPE = "type"
+    const val TEXT = "text"
+    const val MEDIA_URL = "mediaUrl"
+    const val MEDIA_PUBLIC_ID = "mediaPublicId"
+    const val DURATION_MS = "durationMs"
+    const val TXN_ID = "txnId"
+    const val CREATED_AT = "createdAt"
+
+    /** Uids that have received the message. */
+    const val DELIVERED_TO = "deliveredTo"
+
+    /** Uids that have opened the conversation since the message arrived. */
+    const val READ_BY = "readBy"
+}
+
+object LastMessageFields {
+    const val TEXT = "text"
+    const val TYPE = "type"
+    const val AT = "at"
+    const val SENDER_ID = "senderId"
+}
+
 object LocalContactFields {
     const val NAME = "name"
     const val PHONE = "phone"

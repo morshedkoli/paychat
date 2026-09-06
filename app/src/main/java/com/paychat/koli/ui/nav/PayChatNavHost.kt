@@ -25,7 +25,9 @@ import com.paychat.koli.feature.auth.otp.OtpPurpose
 import com.paychat.koli.feature.auth.otp.OtpScreen
 import com.paychat.koli.feature.auth.register.RegisterScreen
 import com.paychat.koli.feature.contacts.AddContactScreen
+import com.paychat.koli.feature.chat.ChatScreen
 import com.paychat.koli.feature.contacts.ContactsScreen
+import com.paychat.koli.feature.home.HomeScreen
 import com.paychat.koli.ui.screens.PlaceholderScreen
 
 /**
@@ -106,14 +108,10 @@ fun PayChatNavHost(
             }
 
             composable(Routes.HOME) {
-                PlaceholderScreen(
-                    title = "Home",
-                    phase = "Phase 3 and 6",
-                    navController = navController,
-                    actions = listOf(
-                        "Contacts" to { navController.navigate(Routes.CONTACTS) },
-                        "Sign out" to { authGateViewModel.signOut() },
-                    ),
+                HomeScreen(
+                    onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
+                    onNewChat = { navController.navigate(Routes.CONTACTS) },
+                    onSettings = { navController.navigate(Routes.SETTINGS) },
                 )
             }
             composable(Routes.CONTACTS) {
@@ -139,7 +137,13 @@ fun PayChatNavHost(
                 Routes.CHAT,
                 arguments = listOf(navArgument(NavArgs.THREAD_ID) { type = NavType.StringType })
             ) {
-                PlaceholderScreen("Chat", "Phase 3", navController)
+                ChatScreen(
+                    onBack = { navController.popBackStack() },
+                    onAddTransaction = { threadId ->
+                        navController.navigate(Routes.addTransaction(threadId))
+                    },
+                    onOpenLedger = { threadId -> navController.navigate(Routes.ledger(threadId)) },
+                )
             }
             composable(
                 Routes.ADD_TRANSACTION,

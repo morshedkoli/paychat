@@ -7,10 +7,14 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 2 — contacts. Authentication is complete, and the app can now find which
-of the user's contacts have accounts, add people who do not, and open the
-conversation for either. Remaining screens are placeholders that name the phase
-which replaces them.
+Phase 3 — chat. Authentication and contacts are complete, and the app now has a
+working conversation list and one-to-one text messaging with delivery and read
+receipts, backed by an offline outbox. Remaining screens are placeholders that
+name the phase which replaces them.
+
+The typing indicator listed in the specification is not built yet: it needs
+presence writes on every keystroke, which is worth designing alongside the
+notification work in phase 8 rather than bolting on here.
 
 Implemented and unit tested:
 
@@ -21,7 +25,29 @@ Implemented and unit tested:
 - `core/validation/Validators.kt` — name, password, and OTP rules
 - `data/auth/` — registration, sign in, password reset
 - `data/contacts/` — address book sync, account discovery, local contacts
+- `data/chat/` — messages, threads, receipts
+- `data/sync/` — offline outbox
 - `firebase/firestore.rules` — every ledger invariant from the spec
+
+## How messaging works
+
+Room is the source of truth for what the screen shows, so a chat opens
+instantly from cache and behaves the same with or without a connection.
+
+Sending writes the message to Room with a client-generated id and queues
+`OutboxWorker`. The upload uses `set` with that id, so retrying an upload that
+actually succeeded overwrites the same document rather than sending a
+duplicate. Receiving is a Firestore snapshot listener that emits mapped rows;
+the collector, which is a coroutine, does the database write, because a
+snapshot listener cannot suspend.
+
+Receipts live in two array fields, `deliveredTo` and `readBy`, and are the only
+fields a non-sender may change on a message. `MessageMapper` holds the rule
+that makes them readable: on a message the user sent they describe what the
+*other* person did, and on a message the user received `readAt` records when
+the user themselves read it, which is what the unread badge counts. Every
+message lists its own sender in both arrays, so the mapper ignores the sender's
+own entry — otherwise every message would show as read the moment it was sent.
 
 ## Contacts and privacy
 
@@ -114,8 +140,9 @@ firebase deploy --only firestore:rules,firestore:indexes
 ./gradlew testDebugUnitTest
 ```
 
-44 unit tests cover the money arithmetic, the balance rules, phone
-normalisation, thread ids, input validation, and address book normalisation.
+58 unit tests cover the money arithmetic, the balance rules, phone
+normalisation, thread ids, input validation, address book normalisation,
+receipt mapping, and timestamp formatting.
 
 ## Layout
 
