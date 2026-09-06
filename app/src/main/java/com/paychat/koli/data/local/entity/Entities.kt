@@ -89,6 +89,25 @@ data class TransactionEntity(
     val syncState: SyncState = SyncState.PENDING,
 ) : LedgerEntry
 
+/**
+ * A number from the device address book, together with what we know about
+ * whether it belongs to a PayChat account.
+ *
+ * Only the phone number is ever sent anywhere, and only to read `phoneIndex`.
+ * The address book itself is never uploaded.
+ */
+@Entity(
+    tableName = "device_contacts",
+    indices = [Index(value = ["phone"], unique = true), Index("linkedUid")]
+)
+data class DeviceContactEntity(
+    @PrimaryKey val phone: String,
+    val displayName: String,
+    /** The PayChat account using this number, when there is one. */
+    val linkedUid: String? = null,
+    val resolvedAt: Long = 0L,
+)
+
 @Entity(
     tableName = "local_contacts",
     indices = [Index(value = ["phone"], unique = true)]

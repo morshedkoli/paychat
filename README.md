@@ -7,19 +7,32 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 1 — authentication. Registration, OTP verification, password login,
-password reset, phone number claiming, and single-device sessions are
-implemented. Remaining screens are placeholders that name the phase which
-replaces them.
+Phase 2 — contacts. Authentication is complete, and the app can now find which
+of the user's contacts have accounts, add people who do not, and open the
+conversation for either. Remaining screens are placeholders that name the phase
+which replaces them.
 
 Implemented and unit tested:
 
 - `core/money/Money.kt` — integer poisha, exact parsing and formatting
 - `core/ledger/BalanceCalculator.kt` — direction, acceptance, and sign rules
 - `core/phone/PhoneNumbers.kt` — E.164 normalisation
+- `core/model/ThreadIds.kt` — derived, order-independent thread ids
 - `core/validation/Validators.kt` — name, password, and OTP rules
 - `data/auth/` — registration, sign in, password reset
+- `data/contacts/` — address book sync, account discovery, local contacts
 - `firebase/firestore.rules` — every ledger invariant from the spec
+
+## Contacts and privacy
+
+The address book is never uploaded. Contact discovery reads the numbers on the
+device, normalises them to E.164, and reads `phoneIndex` for those ids in
+batches of 30 — the Firestore `whereIn` limit. The result is cached in Room.
+Numbers that leave the address book are dropped on the next sync.
+
+A number without an account can still be added by hand. That creates a local
+contact and a one-sided thread owned by the user alone, which becomes a real
+two-party thread when the number registers (phase 7).
 
 ## How an account works
 

@@ -33,3 +33,19 @@ object UserFields {
 object PhoneIndexFields {
     const val UID = "uid"
 }
+
+object ThreadFields {
+    const val MEMBERS = "members"
+    const val IS_LOCAL = "isLocal"
+    const val LOCAL_CONTACT = "localContact"
+    const val LAST_MESSAGE = "lastMessage"
+    const val UPDATED_AT = "updatedAt"
+}
+
+object LocalContactFields {
+    const val NAME = "name"
+    const val PHONE = "phone"
+    const val THREAD_ID = "threadId"
+    const val LINKED_UID = "linkedUid"
+    const val CREATED_AT = "createdAt"
+}

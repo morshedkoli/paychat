@@ -22,6 +22,9 @@ fun PlaceholderScreen(
     title: String,
     phase: String,
     navController: NavHostController,
+    /** Temporary links so that finished screens are reachable before the
+     *  screens around them exist. */
+    actions: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
     Scaffold { inner ->
         Column(
@@ -38,6 +41,9 @@ fun PlaceholderScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            actions.forEach { (label, onClick) ->
+                TextButton(onClick = onClick) { Text(label) }
+            }
             if (navController.previousBackStackEntry != null) {
                 TextButton(onClick = { navController.popBackStack() }) { Text("Back") }
             }

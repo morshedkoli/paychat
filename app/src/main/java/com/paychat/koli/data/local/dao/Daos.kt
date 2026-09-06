@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
 import com.paychat.koli.core.model.SyncState
+import com.paychat.koli.data.local.entity.DeviceContactEntity
 import com.paychat.koli.data.local.entity.LocalContactEntity
 import com.paychat.koli.data.local.entity.MessageEntity
 import com.paychat.koli.data.local.entity.ThreadEntity
@@ -85,6 +86,28 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE syncState IN (:states)")
     suspend fun awaitingSync(states: List<SyncState>): List<TransactionEntity>
+}
+
+@Dao
+interface DeviceContactDao {
+    @Upsert suspend fun upsertAll(contacts: List<DeviceContactEntity>)
+
+    @Query("SELECT * FROM device_contacts WHERE linkedUid IS NOT NULL ORDER BY displayName ASC")
+    fun observeRegistered(): Flow<List<DeviceContactEntity>>
+
+    @Query("SELECT * FROM device_contacts WHERE linkedUid IS NULL ORDER BY displayName ASC")
+    fun observeUnregistered(): Flow<List<DeviceContactEntity>>
+
+    @Query("SELECT * FROM device_contacts WHERE phone = :phone LIMIT 1")
+    suspend fun byPhone(phone: String): DeviceContactEntity?
+
+    /**
+     * Removes numbers no longer in the address book. Room has no "delete where
+     * not in a large list", so the sync passes the timestamp it just wrote and
+     * anything older is stale.
+     */
+    @Query("DELETE FROM device_contacts WHERE resolvedAt < :before")
+    suspend fun deleteResolvedBefore(before: Long)
 }
 
 @Dao

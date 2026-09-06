@@ -24,6 +24,8 @@ import com.paychat.koli.feature.auth.login.LoginScreen
 import com.paychat.koli.feature.auth.otp.OtpPurpose
 import com.paychat.koli.feature.auth.otp.OtpScreen
 import com.paychat.koli.feature.auth.register.RegisterScreen
+import com.paychat.koli.feature.contacts.AddContactScreen
+import com.paychat.koli.feature.contacts.ContactsScreen
 import com.paychat.koli.ui.screens.PlaceholderScreen
 
 /**
@@ -104,13 +106,33 @@ fun PayChatNavHost(
             }
 
             composable(Routes.HOME) {
-                PlaceholderScreen("Home", "Phase 3 and 6", navController)
+                PlaceholderScreen(
+                    title = "Home",
+                    phase = "Phase 3 and 6",
+                    navController = navController,
+                    actions = listOf(
+                        "Contacts" to { navController.navigate(Routes.CONTACTS) },
+                        "Sign out" to { authGateViewModel.signOut() },
+                    ),
+                )
             }
             composable(Routes.CONTACTS) {
-                PlaceholderScreen("Contacts", "Phase 2", navController)
+                ContactsScreen(
+                    onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
+                    onAddContact = { navController.navigate(Routes.ADD_CONTACT) },
+                )
             }
             composable(Routes.ADD_CONTACT) {
-                PlaceholderScreen("Add contact", "Phase 2", navController)
+                AddContactScreen(
+                    onOpenThread = { threadId ->
+                        // The contact is saved, so returning here would only
+                        // offer to add them again.
+                        navController.navigate(Routes.chat(threadId)) {
+                            popUpTo(Routes.ADD_CONTACT) { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
             }
 
             composable(

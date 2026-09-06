@@ -23,6 +23,11 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PayChatDatabase =
         Room.databaseBuilder(context, PayChatDatabase::class.java, PayChatDatabase.NAME)
+            // Pre-release only. Room holds a cache of Firestore plus anything
+            // still waiting to sync, so wiping it would discard unsent
+            // messages and transactions. Replace with real migrations before
+            // the first Play Store build (phase 10).
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides fun provideUserDao(db: PayChatDatabase): UserDao = db.userDao()
