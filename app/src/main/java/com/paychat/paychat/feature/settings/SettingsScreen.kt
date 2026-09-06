@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.data.settings.ThemeChoice
 import com.paychat.paychat.feature.lock.canLock
 import com.paychat.paychat.ui.components.Avatar
+import com.paychat.paychat.ui.components.shareFile
 import com.paychat.paychat.ui.components.shareStatement
 
 /**
@@ -74,6 +75,7 @@ fun SettingsScreen(
 
     var editingName by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     val pickPhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -84,6 +86,18 @@ fun SettingsScreen(
             shareStatement(context, uri, "PayChat statement")
             viewModel.statementShared()
         }
+    }
+
+    LaunchedEffect(state.dataFile) {
+        state.dataFile?.let { uri ->
+            shareFile(context, uri, "application/json", "PayChat data export")
+            viewModel.dataFileShared()
+        }
+    }
+
+    // The account is gone, so there is nothing left to show behind this.
+    LaunchedEffect(state.deleted) {
+        if (state.deleted) onSignOut()
     }
 
     LaunchedEffect(state.message) {
@@ -170,6 +184,17 @@ fun SettingsScreen(
                 },
             )
 
+            ListItem(
+                modifier = Modifier.clickable(
+                    enabled = !state.exporting,
+                    onClick = viewModel::exportData,
+                ),
+                headlineContent = { Text("Export my data") },
+                supportingContent = {
+                    Text("Every conversation, message and transaction, as JSON.")
+                },
+            )
+
             HorizontalDivider()
 
             ListItem(
@@ -179,6 +204,22 @@ fun SettingsScreen(
                 },
                 supportingContent = {
                     Text("This device stops receiving notifications for the account.")
+                },
+            )
+
+            ListItem(
+                modifier = Modifier.clickable(
+                    enabled = !state.deleting,
+                    onClick = { confirmDelete = true },
+                ),
+                headlineContent = {
+                    Text("Delete my account", color = MaterialTheme.colorScheme.error)
+                },
+                supportingContent = {
+                    Text("Permanent. Your profile and your number are released.")
+                },
+                trailingContent = {
+                    if (state.deleting) CircularProgressIndicator(Modifier.size(20.dp))
                 },
             )
         }
@@ -191,6 +232,33 @@ fun SettingsScreen(
             onSave = { name ->
                 viewModel.setName(name)
                 editingName = false
+            },
+        )
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete your account?") },
+            text = {
+                Text(
+                    "Your profile is removed and your phone number is released, so " +
+                        "it can be registered again. Transactions in a shared " +
+                        "conversation stay: each one is a record between two people, " +
+                        "and the other side's ledger has to keep adding up. This " +
+                        "cannot be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmDelete = false
+                        viewModel.deleteAccount()
+                    }
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Keep my account") }
             },
         )
     }

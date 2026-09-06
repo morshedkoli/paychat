@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.paychat.paychat.core.errors.userMessage
+import com.paychat.paychat.data.account.AccountRepository
+import com.paychat.paychat.data.export.DataExporter
 import com.paychat.paychat.data.export.StatementExporter
 import com.paychat.paychat.data.profile.ProfileRepository
 import com.paychat.paychat.data.settings.AppPreferences
@@ -26,6 +28,11 @@ data class SettingsUiState(
     val uploadingPhoto: Boolean = false,
     val exporting: Boolean = false,
     val statement: Uri? = null,
+    /** Set once the JSON copy of everything is written. */
+    val dataFile: Uri? = null,
+    val deleting: Boolean = false,
+    /** Flipped once the account is gone, which sends the app back to sign in. */
+    val deleted: Boolean = false,
     val message: String? = null,
 )
 
@@ -34,6 +41,8 @@ class SettingsViewModel @Inject constructor(
     private val profile: ProfileRepository,
     private val preferences: AppPreferences,
     private val exporter: StatementExporter,
+    private val dataExporter: DataExporter,
+    private val account: AccountRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -116,7 +125,46 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    /** The whole of it, as JSON, which is what a data export has to be. */
+    fun exportData() {
+        if (_state.value.exporting) return
+        _state.update { it.copy(exporting = true) }
+
+        viewModelScope.launch {
+            dataExporter.export()
+                .onSuccess { uri -> _state.update { it.copy(exporting = false, dataFile = uri) } }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            exporting = false,
+                            message = error.userMessage("Could not export your data."),
+                        )
+                    }
+                }
+        }
+    }
+
+    fun deleteAccount() {
+        if (_state.value.deleting) return
+        _state.update { it.copy(deleting = true) }
+
+        viewModelScope.launch {
+            account.deleteAccount()
+                .onSuccess { _state.update { it.copy(deleting = false, deleted = true) } }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            deleting = false,
+                            message = error.userMessage("Your account was not deleted."),
+                        )
+                    }
+                }
+        }
+    }
+
     fun statementShared() = _state.update { it.copy(statement = null) }
+
+    fun dataFileShared() = _state.update { it.copy(dataFile = null) }
 
     fun messageShown() = _state.update { it.copy(message = null) }
 }
