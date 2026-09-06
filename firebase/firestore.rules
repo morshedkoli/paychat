@@ -75,13 +75,23 @@ service cloud.firestore {
         return signedIn() && uid() in incoming().members;
       }
 
+      // A member may block the other one, and unblock them again, but may
+      // not add or remove anybody else from that list: comparing both lists
+      // with the caller's own uid taken out leaves exactly the part they are
+      // not allowed to touch.
+      function onlyOwnBlockChanged() {
+        return incoming().get('blockedBy', []).removeAll([uid()])
+            == existing().get('blockedBy', []).removeAll([uid()]);
+      }
+
       allow read: if isMember();
       allow create: if isMemberOfIncoming()
                     && incoming().members.size() <= 2;
       allow update: if isMember()
                     // Membership is set at creation and by the handover
                     // function only, never by an ordinary client update.
-                    && incoming().members == existing().members;
+                    && incoming().members == existing().members
+                    && onlyOwnBlockChanged();
       allow delete: if false;
 
       // ----------------------------------------------------------- messages
@@ -93,8 +103,15 @@ service cloud.firestore {
                  && uid() in get(/databases/$(database)/documents/threads/$(threadId)).data.members;
         }
 
+        // Either side blocking the other closes the conversation to new
+        // messages. History stays readable to both.
+        function notBlocked() {
+          return get(/databases/$(database)/documents/threads/$(threadId))
+                 .data.get('blockedBy', []).size() == 0;
+        }
+
         allow read: if inThread();
-        allow create: if inThread() && incoming().senderId == uid();
+        allow create: if inThread() && notBlocked() && incoming().senderId == uid();
         // Only receipt fields may change after a message is written.
         allow update: if inThread()
                       && incoming().diff(existing()).affectedKeys()
@@ -112,6 +129,14 @@ service cloud.firestore {
 
         function inThread() {
           return signedIn() && uid() in members();
+        }
+
+        // A blocked conversation records no new money either. What is already
+        // recorded stays exactly as it is: blocking someone must not erase
+        // what is owed.
+        function notBlocked() {
+          return get(/databases/$(database)/documents/threads/$(threadId))
+                 .data.get('blockedBy', []).size() == 0;
         }
 
         function isLocalThread() {
@@ -149,6 +174,7 @@ service cloud.firestore {
         allow read: if inThread();
 
         allow create: if inThread()
+                      && notBlocked()
                       && incoming().createdBy == uid()
                       && validAmount()
                       && validDirection()
@@ -197,6 +223,18 @@ service cloud.firestore {
         // are made with a reversing entry, never by editing history.
         allow delete: if false;
       }
+    }
+
+    // -------------------------------------------------------------- reports
+
+    // Filed by a user, read only by moderation tooling with admin
+    // credentials. Nothing in the app reads a report back, so nobody can
+    // enumerate who has been reported, and a report cannot be edited away
+    // once it is filed.
+    match /reports/{reportId} {
+      allow read: if false;
+      allow create: if signedIn() && incoming().reportedBy == uid();
+      allow update, delete: if false;
     }
 
     // ------------------------------------------------- per-user subcollections

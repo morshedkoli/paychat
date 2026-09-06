@@ -35,6 +35,10 @@ data class ThreadEntity(
     val isLocal: Boolean,
     /** Inherited history on this thread is waiting for the other side to review. */
     val awaitingConfirmation: Boolean = false,
+    /** This user has blocked the other one. */
+    val blockedByMe: Boolean = false,
+    /** The other user has blocked this one. */
+    val blockedByPeer: Boolean = false,
     val lastMessageText: String? = null,
     val lastMessageAt: Long = 0L,
     val unreadCount: Int = 0,

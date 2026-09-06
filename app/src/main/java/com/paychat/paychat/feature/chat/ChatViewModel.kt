@@ -12,6 +12,8 @@ import com.paychat.paychat.data.local.entity.MessageEntity
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.media.MediaFiles
 import com.paychat.paychat.data.media.VoiceRecorder
+import com.paychat.paychat.data.moderation.ModerationRepository
+import com.paychat.paychat.data.moderation.ReportReason
 import com.paychat.paychat.data.notifications.VisibleThread
 import com.paychat.paychat.data.transactions.TransactionRepository
 import com.paychat.paychat.ui.nav.NavArgs
@@ -33,6 +35,8 @@ data class ChatUiState(
     val peerPhone: String = "",
     val peerPhotoUrl: String? = null,
     val isLocal: Boolean = false,
+    val blockedByMe: Boolean = false,
+    val blockedByPeer: Boolean = false,
     val balance: Money = Money.ZERO,
     /** Newest first, which is the order the list renders in. */
     val messages: List<MessageEntity> = emptyList(),
@@ -42,8 +46,13 @@ data class ChatUiState(
     /** Set while a voice message is being recorded. */
     val recordingMessageId: String? = null,
     val error: String? = null,
+    /** Something worth saying that is not a failure, such as a filed report. */
+    val notice: String? = null,
 ) {
-    val canSend: Boolean get() = draft.isNotBlank()
+    /** Blocking closes the conversation in both directions. */
+    val blocked: Boolean get() = blockedByMe || blockedByPeer
+
+    val canSend: Boolean get() = draft.isNotBlank() && !blocked
 }
 
 @HiltViewModel
@@ -54,6 +63,7 @@ class ChatViewModel @Inject constructor(
     private val voiceRecorder: VoiceRecorder,
     private val transactions: TransactionRepository,
     private val visibleThread: VisibleThread,
+    private val moderation: ModerationRepository,
     auth: AuthRepository,
 ) : ViewModel() {
 
@@ -79,6 +89,8 @@ class ChatViewModel @Inject constructor(
                         peerPhone = thread?.peerPhone.orEmpty(),
                         peerPhotoUrl = thread?.peerPhotoUrl,
                         isLocal = thread?.isLocal ?: false,
+                        blockedByMe = thread?.blockedByMe ?: false,
+                        blockedByPeer = thread?.blockedByPeer ?: false,
                         balance = Money(balance?.amountMinor ?: 0L),
                         messages = messages,
                     )
@@ -137,6 +149,34 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    // --------------------------------------------------------- blocking
+
+    fun setBlocked(blocked: Boolean) {
+        viewModelScope.launch {
+            val result =
+                if (blocked) moderation.block(threadId) else moderation.unblock(threadId)
+            result.onFailure { error ->
+                _state.update {
+                    it.copy(error = error.message ?: "That did not work.")
+                }
+            }
+        }
+    }
+
+    fun report(reason: ReportReason, detail: String?) {
+        viewModelScope.launch {
+            moderation.report(threadId, reason, detail)
+                .onSuccess {
+                    _state.update { it.copy(notice = "Reported. Thank you.") }
+                }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(error = error.message ?: "That report was not filed.")
+                    }
+                }
+        }
+    }
+
     fun onDraftChange(value: String) = _state.update { it.copy(draft = value) }
 
     fun send() {
@@ -160,6 +200,8 @@ class ChatViewModel @Inject constructor(
     }
 
     fun dismissError() = _state.update { it.copy(error = null) }
+
+    fun dismissNotice() = _state.update { it.copy(notice = null) }
 
     // ------------------------------------------------------------ attachments
 

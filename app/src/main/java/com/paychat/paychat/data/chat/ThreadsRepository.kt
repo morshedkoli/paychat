@@ -122,6 +122,7 @@ private fun DocumentSnapshot.toThreadEntity(viewerUid: String): ThreadEntity? {
     val isLocal = getBoolean(ThreadFields.IS_LOCAL) ?: false
     val localContact = get(ThreadFields.LOCAL_CONTACT) as? Map<*, *>
     val lastMessage = get(ThreadFields.LAST_MESSAGE) as? Map<*, *>
+    val blockedBy = (get(ThreadFields.BLOCKED_BY) as? List<*>)?.filterIsInstance<String>().orEmpty()
 
     return ThreadEntity(
         threadId = id,
@@ -129,6 +130,8 @@ private fun DocumentSnapshot.toThreadEntity(viewerUid: String): ThreadEntity? {
         peerPhone = localContact?.get(LocalContactFields.PHONE) as? String ?: "",
         peerName = localContact?.get(LocalContactFields.NAME) as? String ?: "",
         isLocal = isLocal,
+        blockedByMe = viewerUid in blockedBy,
+        blockedByPeer = blockedBy.any { it != viewerUid },
         lastMessageText = lastMessage?.get(LastMessageFields.TEXT) as? String,
         lastMessageAt = (lastMessage?.get(LastMessageFields.AT) as? Number)?.toLong() ?: 0L,
         updatedAt = (get(ThreadFields.UPDATED_AT) as? Number)?.toLong() ?: 0L,

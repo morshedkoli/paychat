@@ -24,10 +24,14 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -42,6 +46,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +62,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paychat.paychat.data.moderation.ReportReason
 import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.theme.AmountStyle
 import com.paychat.paychat.ui.theme.PayChatTheme
@@ -85,6 +91,9 @@ fun ChatScreen(
     }
 
     var showAttachments by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
+    var confirmBlock by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     var pendingCapture by remember { mutableStateOf<Pair<String, File>?>(null) }
 
     val pickImage = rememberLauncherForActivityResult(
@@ -112,6 +121,13 @@ fun ChatScreen(
         state.error?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.dismissError()
+        }
+    }
+
+    LaunchedEffect(state.notice) {
+        state.notice?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissNotice()
         }
     }
 
@@ -176,6 +192,31 @@ fun ChatScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (state.blockedByMe) "Unblock" else "Block") },
+                            // Being blocked by the other person is not
+                            // something this side can undo.
+                            enabled = !state.blockedByPeer,
+                            onClick = {
+                                showMenu = false
+                                if (state.blockedByMe) viewModel.setBlocked(false)
+                                else confirmBlock = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Report") },
+                            onClick = {
+                                showMenu = false
+                                reporting = true
+                            },
+                        )
+                    }
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -217,19 +258,116 @@ fun ChatScreen(
 
             HorizontalDivider()
 
-            Composer(
-                draft = state.draft,
-                canSend = state.canSend,
-                recording = state.recordingMessageId != null,
-                onDraftChange = viewModel::onDraftChange,
-                onSend = viewModel::send,
-                onAttach = { showAttachments = true },
-                onStartRecording = { requestAudio.launch(Manifest.permission.RECORD_AUDIO) },
-                onStopRecording = viewModel::stopRecording,
-                onCancelRecording = viewModel::cancelRecording,
-            )
+            if (state.blocked) {
+                BlockedNotice(
+                    blockedByMe = state.blockedByMe,
+                    peerName = state.peerName,
+                    onUnblock = { viewModel.setBlocked(false) },
+                )
+            } else {
+                Composer(
+                    draft = state.draft,
+                    canSend = state.canSend,
+                    recording = state.recordingMessageId != null,
+                    onDraftChange = viewModel::onDraftChange,
+                    onSend = viewModel::send,
+                    onAttach = { showAttachments = true },
+                    onStartRecording = { requestAudio.launch(Manifest.permission.RECORD_AUDIO) },
+                    onStopRecording = viewModel::stopRecording,
+                    onCancelRecording = viewModel::cancelRecording,
+                )
+            }
         }
     }
+
+    if (confirmBlock) {
+        AlertDialog(
+            onDismissRequest = { confirmBlock = false },
+            title = { Text("Block " + state.peerName + "?") },
+            text = {
+                Text(
+                    "Neither of you can send messages or record money in this " +
+                        "conversation. What is already recorded stays exactly as it is."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmBlock = false
+                        viewModel.setBlocked(true)
+                    }
+                ) { Text("Block") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBlock = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (reporting) {
+        ReportDialog(
+            peerName = state.peerName,
+            onDismiss = { reporting = false },
+            onReport = { reason ->
+                reporting = false
+                viewModel.report(reason, detail = null)
+            },
+        )
+    }
+}
+
+/**
+ * Replaces the composer while the conversation is closed.
+ *
+ * The history above it stays exactly where it was: blocking someone settles
+ * nothing, and hiding what is owed would be the one thing this app must not
+ * do.
+ */
+@Composable
+private fun BlockedNotice(blockedByMe: Boolean, peerName: String, onUnblock: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (blockedByMe) {
+                "You blocked " + peerName + ". The ledger is unchanged."
+            } else {
+                peerName + " has blocked this conversation. The ledger is unchanged."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (blockedByMe) {
+            TextButton(onClick = onUnblock) { Text("Unblock") }
+        }
+    }
+}
+
+@Composable
+private fun ReportDialog(
+    peerName: String,
+    onDismiss: () -> Unit,
+    onReport: (ReportReason) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Report " + peerName) },
+        text = {
+            Column {
+                Text(
+                    "A moderator sees this conversation and why you reported it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                ReportReason.entries.forEach { reason ->
+                    TextButton(onClick = { onReport(reason) }) { Text(reason.label) }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

@@ -13,6 +13,9 @@ object Collections {
     const val TRANSACTIONS = "transactions"
     const val THREAD_BALANCES = "threadBalances"
     const val LOCAL_CONTACTS = "localContacts"
+
+    /** Where a report of abuse is filed. Nothing in the app reads it back. */
+    const val REPORTS = "reports"
 }
 
 object UserFields {
@@ -36,6 +39,9 @@ object PhoneIndexFields {
 
 object ThreadFields {
     const val MEMBERS = "members"
+
+    /** Uids who have blocked the other party in this thread. */
+    const val BLOCKED_BY = "blockedBy"
     const val IS_LOCAL = "isLocal"
     const val LOCAL_CONTACT = "localContact"
     const val LAST_MESSAGE = "lastMessage"
