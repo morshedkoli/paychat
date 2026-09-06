@@ -154,12 +154,16 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 ## Cloudinary setup
 
-1. Create a free Cloudinary account. Note the cloud name.
-2. Put the cloud name in `local.properties` as `cloudinary.cloudName`.
-3. The API key and secret go into Cloud Functions configuration only. They must
-   never be placed in the app or in an unsigned upload preset — an unsigned
-   preset lets anyone holding the APK upload arbitrary files and exhaust the
-   quota.
+Nothing about Cloudinary is configured in the app. The signing function returns
+the cloud name along with every signature, so all three values live in Secret
+Manager and there is no second copy to drift out of step.
+
+1. Create a free Cloudinary account. Note the cloud name, API key and secret.
+2. Set all three as Cloud Functions secrets (see below).
+
+The API key and secret must never be placed in the app, and an unsigned upload
+preset must never be used: it lets anyone holding the APK upload arbitrary
+files and exhaust the quota.
 
 ## Running the tests
 

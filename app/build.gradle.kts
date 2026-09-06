@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,12 +6,6 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.google.services)
-}
-
-// Local, untracked configuration. See local.properties.sample.
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -29,13 +21,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Cloudinary cloud name is public information; the API secret never
-        // ships in the app. Uploads are signed by a Cloud Function.
-        buildConfigField(
-            "String",
-            "CLOUDINARY_CLOUD_NAME",
-            "\"${localProps.getProperty("cloudinary.cloudName", "")}\""
-        )
+        // The Cloudinary cloud name is not built in. The signing function
+        // returns it with every signature, so Secret Manager is the single
+        // place it is configured and the app cannot drift out of step with it.
         buildConfigField("String", "DEFAULT_REGION", "\"BD\"")
         buildConfigField("String", "CURRENCY_CODE", "\"BDT\"")
     }

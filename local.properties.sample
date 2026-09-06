@@ -1,6 +1,2 @@
 # Copy to local.properties and fill in. local.properties is never committed.
 sdk.dir=/path/to/Android/Sdk
-
-# Cloudinary cloud name only. The API key and secret live in Cloud Functions
-# config, never in the app.
-cloudinary.cloudName=your-cloud-name
