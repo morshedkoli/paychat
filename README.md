@@ -290,11 +290,29 @@ files and exhaust the quota.
 ./gradlew testDebugUnitTest
 ```
 
-90 unit tests cover the money arithmetic, the balance, statement, handover and
-transaction rules,
-phone
-normalisation, thread ids, input validation, address book normalisation,
-receipt mapping, upload request assembly, and timestamp formatting.
+105 unit tests cover the money arithmetic, the balance, statement, handover
+and transaction rules, phone normalisation, thread ids, input validation,
+address book normalisation, receipt mapping, upload request assembly,
+timestamp formatting, search pattern escaping, and failure wording.
+
+The security rules are run against the real rules engine, which needs the
+Firestore emulator:
+
+```bash
+cd firebase/tests && npm install && npm test
+```
+
+29 cases state an invariant as something that must be refused. Writing them
+found a defect no amount of reading had: comparing an optional field that is
+absent throws, which denied every acceptance of a transaction that had never
+had a reversesId written.
+
+The Room migrations are checked on a device or emulator, because they run
+against real SQLite:
+
+```bash
+./gradlew connectedDebugAndroidTest
+```
 
 ## Layout
 
@@ -330,3 +348,38 @@ elsewhere.
 The deployed functions are `signMediaUpload`, `attachHistoryOnRegistration`,
 the three notification triggers, and `remindDueTransactions`, which runs at
 18:00 Asia/Dhaka.
+
+## Releasing
+
+The release build is minified and resource-shrunk. Signing is configured from
+`keystore.properties`, which is never committed; copy `keystore.properties.sample`
+and fill it in. Without that file the build still runs and produces an unsigned
+artifact, so a contributor who has no business holding the upload key is not
+blocked by it.
+
+```bash
+./gradlew bundleRelease
+```
+
+Before the first upload:
+
+1. Deploy the rules, indexes and functions, and confirm the reminder job
+   appears in Cloud Scheduler.
+2. Register the release signing certificate's SHA-1 and SHA-256 with the
+   Firebase project. Phone authentication fails on a build signed with a key
+   Firebase has never seen.
+3. Turn on App Check with Play Integrity, then set `enforceAppCheck: true` in
+   `firebase/functions/src/media.ts` and redeploy. Until then a signature can
+   be requested by anything holding a valid account token.
+4. Fill in the Play data safety form. The app collects a phone number, a
+   name, an optional picture, and the messages and money records the user
+   writes. Settings offers both a data export and account deletion, which is
+   what the policy asks for.
+5. Take the store listing screenshots from a build with real data. Empty
+   screens photograph badly and describe the app poorly.
+
+Deleting an account releases its phone number and removes the profile, but
+leaves transactions in shared conversations: each is a record between two
+people, and the other party's ledger has to keep adding up. The listing and
+the privacy policy should say so, because a user who expects everything to
+vanish will report it as a bug.

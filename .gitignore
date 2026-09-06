@@ -14,3 +14,5 @@ local.properties
 /firebase/functions/node_modules/
 /app/schemas/*.json.bak
 /.kotlin/
+/keystore.properties
+*.jks

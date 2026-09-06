@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,15 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.google.services)
+}
+
+// The release signing key. Absent on a machine that only builds debug, which
+// is why the release build is configured but not required to be signable:
+// asking every contributor for the upload key would be worse than a build
+// that produces an unsigned artifact.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -28,6 +39,18 @@ android {
         buildConfigField("String", "CURRENCY_CODE", "\"BDT\"")
     }
 
+    signingConfigs {
+        create("release") {
+            val storePath = keystoreProperties.getProperty("storeFile")
+            if (storePath != null) {
+                storeFile = rootProject.file(storePath)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // No applicationIdSuffix: the Firebase project registers only
@@ -38,6 +61,12 @@ android {
             isMinifyEnabled = false
         }
         release {
+            // Only when the key is actually present. Configuring a signing
+            // config with no keystore fails the build on machines that have
+            // no business holding the upload key.
+            if (keystoreProperties.getProperty("storeFile") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
