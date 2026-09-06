@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Only the outgoing attachment folder is shared, and only so the camera
+         can write the photo the user just took. -->
+    <files-path name="outgoing_media" path="media/outgoing/" />
+</paths>

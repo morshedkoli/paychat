@@ -7,9 +7,8 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 3 — chat. Authentication and contacts are complete, and the app now has a
-working conversation list and one-to-one text messaging with delivery and read
-receipts, backed by an offline outbox. Remaining screens are placeholders that
+Phase 4 — media. Authentication, contacts and chat are complete, and messages
+can now carry a photo or a voice note. Remaining screens are placeholders that
 name the phase which replaces them.
 
 The typing indicator listed in the specification is not built yet: it needs
@@ -26,8 +25,34 @@ Implemented and unit tested:
 - `data/auth/` — registration, sign in, password reset
 - `data/contacts/` — address book sync, account discovery, local contacts
 - `data/chat/` — messages, threads, receipts
+- `data/media/` — photo and voice capture, signed Cloudinary upload
 - `data/sync/` — offline outbox
 - `firebase/firestore.rules` — every ledger invariant from the spec
+
+## How attachments work
+
+The app never holds the Cloudinary API secret. `signMediaUpload`, a Cloud
+Function, signs each upload and the app sends the file straight to Cloudinary,
+so the file never passes through Firebase and does not count against its quota.
+
+The signature covers the public id as well as the timestamp, and the public id
+always begins with the caller's own uid, so a signature cannot be reused to
+overwrite somebody else's file. An unsigned upload preset would have avoided
+the function entirely, and is not used: it lets anyone holding the APK upload
+arbitrary files to the account and exhaust the free quota.
+
+A picked photo is copied into the app's own storage before it is queued,
+because the picker's permission on the original lasts only as long as the
+activity result while an outbox entry may outlive it by days. The outbox
+uploads the file before the message document, so a message is never visible to
+the other person pointing at a file that is not there yet, and stores the
+resulting URL first, so a retry after a failed document write does not upload
+the file twice.
+
+Voice notes are AAC in an MP4 container, uploaded as a Cloudinary `video`
+resource, since Cloudinary has no audio type. The conversation shares one
+ExoPlayer rather than one per bubble: each player holds a hardware codec, and a
+screen full of them would exhaust the device's decoders.
 
 ## How messaging works
 
@@ -140,9 +165,9 @@ firebase deploy --only firestore:rules,firestore:indexes
 ./gradlew testDebugUnitTest
 ```
 
-58 unit tests cover the money arithmetic, the balance rules, phone
+67 unit tests cover the money arithmetic, the balance rules, phone
 normalisation, thread ids, input validation, address book normalisation,
-receipt mapping, and timestamp formatting.
+receipt mapping, upload request assembly, and timestamp formatting.
 
 ## Layout
 
@@ -159,3 +184,17 @@ app/src/main/java/com/paychat/koli/
 firebase/        security rules and indexes
 docs/            specification
 ```
+
+## Cloud Functions
+
+```bash
+cd firebase/functions && npm install
+firebase functions:secrets:set CLOUDINARY_CLOUD_NAME
+firebase functions:secrets:set CLOUDINARY_API_KEY
+firebase functions:secrets:set CLOUDINARY_API_SECRET
+firebase deploy --only functions
+```
+
+The secrets live in Secret Manager, never in the repository and never in the
+app. `signMediaUpload` is deployed to `asia-south1`; change the region in
+`firebase/functions/src/index.ts` if your users are elsewhere.

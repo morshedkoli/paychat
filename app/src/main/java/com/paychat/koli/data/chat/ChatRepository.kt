@@ -72,6 +72,42 @@ class ChatRepository @Inject constructor(
         outbox.schedule()
     }
 
+    /**
+     * Queues an attachment.
+     *
+     * [localPath] must already point inside the app's own storage. A picked
+     * photo is copied there first, because the picker's permission on the
+     * original lasts only as long as the activity result, and an outbox entry
+     * may outlive that by days.
+     */
+    suspend fun sendMedia(
+        threadId: String,
+        messageId: String,
+        type: MessageType,
+        localPath: String,
+        durationMs: Long? = null,
+    ): Result<Unit> = runCatching {
+        require(type == MessageType.IMAGE || type == MessageType.VOICE) {
+            "sendMedia only handles attachments"
+        }
+        val senderId = auth.currentUid ?: error("not signed in")
+        val now = System.currentTimeMillis()
+
+        val message = MessageEntity(
+            messageId = messageId,
+            threadId = threadId,
+            senderId = senderId,
+            type = type,
+            localMediaPath = localPath,
+            durationMs = durationMs,
+            createdAt = now,
+            syncState = SyncState.PENDING,
+        )
+        messageDao.insert(message)
+        threadDao.setLastMessage(threadId, MessageMapper.preview(type, null), now)
+        outbox.schedule()
+    }
+
     /** Uploads one queued message. Called by the outbox worker. */
     suspend fun upload(message: MessageEntity) {
         val document = firestore.collection(Collections.THREADS)

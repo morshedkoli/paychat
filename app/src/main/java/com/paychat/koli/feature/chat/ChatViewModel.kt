@@ -1,12 +1,16 @@
 package com.paychat.koli.feature.chat
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.paychat.koli.core.model.MessageType
 import com.paychat.koli.core.money.Money
 import com.paychat.koli.data.auth.AuthRepository
 import com.paychat.koli.data.chat.ChatRepository
 import com.paychat.koli.data.local.entity.MessageEntity
+import com.paychat.koli.data.media.MediaFiles
+import com.paychat.koli.data.media.VoiceRecorder
 import com.paychat.koli.ui.nav.NavArgs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +19,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 
 data class ChatUiState(
@@ -28,6 +34,8 @@ data class ChatUiState(
     /** Newest first, which is the order the list renders in. */
     val messages: List<MessageEntity> = emptyList(),
     val draft: String = "",
+    /** Set while a voice message is being recorded. */
+    val recordingMessageId: String? = null,
     val error: String? = null,
 ) {
     val canSend: Boolean get() = draft.isNotBlank()
@@ -37,6 +45,8 @@ data class ChatUiState(
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chat: ChatRepository,
+    private val mediaFiles: MediaFiles,
+    private val voiceRecorder: VoiceRecorder,
     auth: AuthRepository,
 ) : ViewModel() {
 
@@ -99,4 +109,86 @@ class ChatViewModel @Inject constructor(
     }
 
     fun dismissError() = _state.update { it.copy(error = null) }
+
+    // ------------------------------------------------------------ attachments
+
+    /**
+     * Reserves the id for an attachment before it exists.
+     *
+     * The camera writes to a file named after the id, and the upload signature
+     * is bound to it, so the id has to be decided first.
+     */
+    fun newAttachmentId(): String = UUID.randomUUID().toString()
+
+    fun cameraFileFor(messageId: String): File = mediaFiles.newCameraFile(messageId)
+
+    /** Queues a photo the user picked from their gallery. */
+    fun sendPickedImage(uri: Uri) {
+        viewModelScope.launch {
+            val messageId = newAttachmentId()
+            val copied = mediaFiles.copyIn(uri, messageId, extension = "jpg")
+            if (copied == null) {
+                _state.update { it.copy(error = "That photo could not be read.") }
+                return@launch
+            }
+            queueMedia(messageId, MessageType.IMAGE, copied.absolutePath)
+        }
+    }
+
+    /** Queues a photo the user just took, already written to [file]. */
+    fun sendCapturedImage(messageId: String, file: File) {
+        if (!file.exists()) {
+            _state.update { it.copy(error = "The photo was not saved.") }
+            return
+        }
+        viewModelScope.launch { queueMedia(messageId, MessageType.IMAGE, file.absolutePath) }
+    }
+
+    fun startRecording() {
+        val messageId = newAttachmentId()
+        voiceRecorder.start(mediaFiles.newVoiceFile(messageId)).fold(
+            onSuccess = { _state.update { it.copy(recordingMessageId = messageId) } },
+            onFailure = {
+                _state.update { it.copy(error = "Could not start recording.") }
+            },
+        )
+    }
+
+    fun stopRecording() {
+        val messageId = _state.value.recordingMessageId ?: return
+        val recording = voiceRecorder.stop()
+        _state.update { it.copy(recordingMessageId = null) }
+
+        if (recording == null) {
+            // Too short to be a message, or the recorder failed. Either way
+            // there is nothing worth sending and no file left behind.
+            return
+        }
+        viewModelScope.launch {
+            queueMedia(
+                messageId = messageId,
+                type = MessageType.VOICE,
+                localPath = recording.file.absolutePath,
+                durationMs = recording.durationMs,
+            )
+        }
+    }
+
+    fun cancelRecording() {
+        voiceRecorder.cancel()
+        _state.update { it.copy(recordingMessageId = null) }
+    }
+
+    private suspend fun queueMedia(
+        messageId: String,
+        type: MessageType,
+        localPath: String,
+        durationMs: Long? = null,
+    ) {
+        chat.sendMedia(threadId, messageId, type, localPath, durationMs).onFailure { error ->
+            _state.update {
+                it.copy(error = error.message ?: "Could not attach that file.")
+            }
+        }
+    }
 }

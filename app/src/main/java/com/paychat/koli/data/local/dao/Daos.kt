@@ -86,6 +86,13 @@ interface MessageDao {
     @Query("UPDATE messages SET syncState = :state WHERE messageId = :messageId")
     suspend fun setSyncState(messageId: String, state: SyncState)
 
+    /** Records where an attachment ended up once it has been uploaded. */
+    @Query(
+        "UPDATE messages SET mediaUrl = :url, mediaPublicId = :publicId, localMediaPath = NULL " +
+            "WHERE messageId = :messageId"
+    )
+    suspend fun setMedia(messageId: String, url: String, publicId: String)
+
     /** Messages from other people that the user has not opened yet. */
     @Query(
         "SELECT * FROM messages WHERE threadId = :threadId AND senderId != :viewerUid " +

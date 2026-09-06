@@ -1,5 +1,11 @@
 package com.paychat.koli.feature.chat
 
+import android.Manifest
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,12 +22,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -32,15 +46,20 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.koli.ui.components.Avatar
 import com.paychat.koli.ui.theme.AmountStyle
 import com.paychat.koli.ui.theme.PayChatTheme
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +72,27 @@ fun ChatScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val playback = rememberVoicePlayback()
+    val context = LocalContext.current
+
+    var showAttachments by remember { mutableStateOf(false) }
+    var pendingCapture by remember { mutableStateOf<Pair<String, File>?>(null) }
+
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? -> uri?.let(viewModel::sendPickedImage) }
+
+    val takePicture = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { saved ->
+        val capture = pendingCapture
+        pendingCapture = null
+        if (saved && capture != null) viewModel.sendCapturedImage(capture.first, capture.second)
+    }
+
+    val requestAudio = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) viewModel.startRecording() }
 
     // The list is reversed, so index 0 is the newest message.
     LaunchedEffect(state.messages.firstOrNull()?.messageId) {
@@ -64,6 +104,39 @@ fun ChatScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.dismissError()
         }
+    }
+
+    // Leaving mid-recording throws the partial file away rather than sending
+    // whatever happened to be captured.
+    DisposeRecording(recording = state.recordingMessageId != null, onCancel = viewModel::cancelRecording)
+
+    if (showAttachments) {
+        AttachmentSheet(
+            onDismiss = { showAttachments = false },
+            onGallery = {
+                showAttachments = false
+                pickImage.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
+            onCamera = {
+                showAttachments = false
+                val messageId = viewModel.newAttachmentId()
+                val file = viewModel.cameraFileFor(messageId)
+                file.parentFile?.mkdirs()
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file,
+                )
+                pendingCapture = messageId to file
+                takePicture.launch(uri)
+            },
+            onTransaction = {
+                showAttachments = false
+                onAddTransaction(state.threadId)
+            },
+        )
     }
 
     Scaffold(
@@ -113,7 +186,11 @@ fun ChatScreen(
                 reverseLayout = true,
             ) {
                 items(state.messages, key = { it.messageId }) { message ->
-                    MessageBubble(message = message, viewerUid = state.viewerUid)
+                    MessageBubble(
+                        message = message,
+                        viewerUid = state.viewerUid,
+                        playback = playback,
+                    )
                 }
             }
 
@@ -122,13 +199,54 @@ fun ChatScreen(
             Composer(
                 draft = state.draft,
                 canSend = state.canSend,
+                recording = state.recordingMessageId != null,
                 onDraftChange = viewModel::onDraftChange,
                 onSend = viewModel::send,
-                onAddTransaction = { onAddTransaction(state.threadId) },
+                onAttach = { showAttachments = true },
+                onStartRecording = { requestAudio.launch(Manifest.permission.RECORD_AUDIO) },
+                onStopRecording = viewModel::stopRecording,
+                onCancelRecording = viewModel::cancelRecording,
             )
         }
     }
 }
+
+@Composable
+private fun DisposeRecording(recording: Boolean, onCancel: () -> Unit) {
+    androidx.compose.runtime.DisposableEffect(recording) {
+        onDispose { if (recording) onCancel() }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AttachmentSheet(
+    onDismiss: () -> Unit,
+    onGallery: () -> Unit,
+    onCamera: () -> Unit,
+    onTransaction: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        ListItem(
+            headlineContent = { Text("Photo from gallery") },
+            leadingContent = { Icon(Icons.Default.Image, contentDescription = null) },
+            modifier = Modifier.clickableRow(onGallery),
+        )
+        ListItem(
+            headlineContent = { Text("Take a photo") },
+            leadingContent = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
+            modifier = Modifier.clickableRow(onCamera),
+        )
+        ListItem(
+            headlineContent = { Text("Record a transaction") },
+            leadingContent = { Icon(Icons.Default.Payments, contentDescription = null) },
+            modifier = Modifier.clickableRow(onTransaction),
+        )
+    }
+}
+
+private fun Modifier.clickableRow(onClick: () -> Unit) = this.clickable(onClick = onClick)
+
 
 @Composable
 private fun BalanceHeader(
@@ -178,9 +296,13 @@ private fun BalanceHeader(
 private fun Composer(
     draft: String,
     canSend: Boolean,
+    recording: Boolean,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
-    onAddTransaction: () -> Unit,
+    onAttach: () -> Unit,
+    onStartRecording: () -> Unit,
+    onStopRecording: () -> Unit,
+    onCancelRecording: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -190,8 +312,24 @@ private fun Composer(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButton(onClick = onAddTransaction) {
-            Icon(Icons.Default.Add, contentDescription = "Record a transaction")
+        if (recording) {
+            IconButton(onClick = onCancelRecording) {
+                Icon(Icons.Default.Close, contentDescription = "Discard recording")
+            }
+            Text(
+                "Recording…",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.weight(1f).padding(bottom = 14.dp),
+            )
+            FilledIconButton(onClick = onStopRecording, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Stop, contentDescription = "Send recording")
+            }
+            return@Row
+        }
+
+        IconButton(onClick = onAttach) {
+            Icon(Icons.Default.Add, contentDescription = "Attach")
         }
         OutlinedTextField(
             value = draft,
@@ -201,11 +339,13 @@ private fun Composer(
             maxLines = 5,
         )
         FilledIconButton(
-            onClick = onSend,
-            enabled = canSend,
+            onClick = if (canSend) onSend else onStartRecording,
             modifier = Modifier.size(48.dp),
         ) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+            Icon(
+                imageVector = if (canSend) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
+                contentDescription = if (canSend) "Send" else "Record a voice message",
+            )
         }
     }
 }
