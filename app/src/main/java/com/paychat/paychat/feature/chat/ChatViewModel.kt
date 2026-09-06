@@ -67,19 +67,21 @@ class ChatViewModel @Inject constructor(
             combine(
                 chat.observeThread(threadId),
                 chat.observeMessages(threadId),
-            ) { thread, messages -> thread to messages }
-                .collect { (thread, messages) ->
-                    _state.update {
-                        it.copy(
-                            peerName = thread?.peerName?.ifBlank { thread.peerPhone }.orEmpty(),
-                            peerPhone = thread?.peerPhone.orEmpty(),
-                            peerPhotoUrl = thread?.peerPhotoUrl,
-                            isLocal = thread?.isLocal ?: false,
-                            balance = Money(thread?.balanceMinor ?: 0L),
-                            messages = messages,
-                        )
-                    }
+                transactions.observeBalance(threadId),
+            ) { thread, messages, balance ->
+                Triple(thread, messages, balance)
+            }.collect { (thread, messages, balance) ->
+                _state.update {
+                    it.copy(
+                        peerName = thread?.peerName?.ifBlank { thread.peerPhone }.orEmpty(),
+                        peerPhone = thread?.peerPhone.orEmpty(),
+                        peerPhotoUrl = thread?.peerPhotoUrl,
+                        isLocal = thread?.isLocal ?: false,
+                        balance = Money(balance?.amountMinor ?: 0L),
+                        messages = messages,
+                    )
                 }
+            }
         }
 
         viewModelScope.launch {

@@ -7,6 +7,7 @@ import com.paychat.paychat.core.ledger.BalanceSummary
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.chat.ThreadsRepository
 import com.paychat.paychat.data.local.entity.ThreadEntity
+import com.paychat.paychat.data.transactions.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,7 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val threads: ThreadsRepository,
+    private val transactions: TransactionRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -44,14 +46,21 @@ class HomeViewModel @Inject constructor(
 
     init {
         // Room drives the screen, so it renders immediately from cache and
-        // updates when the listener brings something new.
+        // updates when the listeners bring something new.
         viewModelScope.launch {
             combine(
                 threads.observeThreads(),
                 threads.observeUnreadCounts(),
-            ) { rows, unread ->
+                transactions.observeBalances(),
+            ) { rows, unread, balances ->
                 val unreadByThread = unread.associate { it.threadId to it.count }
-                rows.map { it.toRow(unreadByThread[it.threadId] ?: 0) }
+                val balanceByThread = balances.associate { it.threadId to Money(it.amountMinor) }
+                rows.map {
+                    it.toRow(
+                        unread = unreadByThread[it.threadId] ?: 0,
+                        balance = balanceByThread[it.threadId] ?: Money.ZERO,
+                    )
+                }
             }.collect { rows ->
                 _state.update {
                     it.copy(
@@ -66,10 +75,16 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             threads.syncThreads().collect { threads.persist(it) }
         }
+
+        // Without this a fresh install would show zero everywhere until each
+        // conversation had been opened and its transactions downloaded.
+        viewModelScope.launch {
+            transactions.syncBalances().collect { transactions.persistBalances(it) }
+        }
     }
 }
 
-private fun ThreadEntity.toRow(unread: Int) = ThreadRow(
+private fun ThreadEntity.toRow(unread: Int, balance: Money) = ThreadRow(
     threadId = threadId,
     name = peerName.ifBlank { peerPhone },
     phone = peerPhone,
@@ -77,6 +92,6 @@ private fun ThreadEntity.toRow(unread: Int) = ThreadRow(
     lastMessage = lastMessageText.orEmpty(),
     lastMessageAt = lastMessageAt,
     unreadCount = unread,
-    balance = Money(balanceMinor),
+    balance = balance,
     isLocal = isLocal,
 )

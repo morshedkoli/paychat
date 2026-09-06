@@ -12,9 +12,11 @@ import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.local.dao.MessageDao
+import com.paychat.paychat.data.local.dao.ThreadBalanceDao
 import com.paychat.paychat.data.local.dao.ThreadDao
 import com.paychat.paychat.data.local.dao.TransactionDao
 import com.paychat.paychat.data.local.entity.MessageEntity
+import com.paychat.paychat.data.local.entity.ThreadBalanceEntity
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.ThreadBalanceFields
@@ -41,6 +43,7 @@ class TransactionRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val messageDao: MessageDao,
     private val threadDao: ThreadDao,
+    private val balanceDao: ThreadBalanceDao,
     private val auth: AuthRepository,
     private val outbox: OutboxScheduler,
 ) {
@@ -189,10 +192,13 @@ class TransactionRepository @Inject constructor(
         val balance = BalanceCalculator.balanceOf(rows, viewerUid)
         val now = System.currentTimeMillis()
 
-        threadDao.setBalance(threadId, balance.minor, now)
+        balanceDao.upsert(
+            ThreadBalanceEntity(threadId = threadId, amountMinor = balance.minor, updatedAt = now)
+        )
 
-        // The home screen of a freshly installed device has no transactions to
-        // add up yet, so the figure is also stored per user on the server.
+        // A freshly installed device has no transactions to add up yet, so the
+        // figure is also stored per user on the server. It is a cache: losing
+        // it costs nothing, because opening the conversation recomputes it.
         runCatching {
             firestore.collection(Collections.USERS).document(viewerUid)
                 .collection(Collections.THREAD_BALANCES).document(threadId)
@@ -203,6 +209,46 @@ class TransactionRepository @Inject constructor(
                     )
                 ).await()
         }
+    }
+
+    fun observeBalances(): Flow<List<ThreadBalanceEntity>> = balanceDao.observeAll()
+
+    fun observeBalance(threadId: String): Flow<ThreadBalanceEntity?> = balanceDao.observe(threadId)
+
+    /**
+     * Watches the balance cache written by this user's other devices.
+     *
+     * This is what lets the home screen of a new install show real totals
+     * without opening every conversation first. A local recompute always wins
+     * afterwards, because it is derived from the rows rather than remembered.
+     */
+    fun syncBalances(): Flow<List<ThreadBalanceEntity>> = callbackFlow {
+        val viewerUid = auth.currentUid
+        if (viewerUid == null) {
+            close()
+            return@callbackFlow
+        }
+
+        val registration = firestore.collection(Collections.USERS).document(viewerUid)
+            .collection(Collections.THREAD_BALANCES)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                trySend(
+                    snapshot.documents.map { document ->
+                        ThreadBalanceEntity(
+                            threadId = document.id,
+                            amountMinor = document.getLong(ThreadBalanceFields.AMOUNT_MINOR) ?: 0L,
+                            updatedAt = document.getLong(ThreadBalanceFields.UPDATED_AT) ?: 0L,
+                        )
+                    }
+                )
+            }
+
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun persistBalances(balances: List<ThreadBalanceEntity>) {
+        if (balances.isNotEmpty()) balanceDao.upsertAll(balances)
     }
 
     /** Uploads one transaction. Called by the outbox worker. */

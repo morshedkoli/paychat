@@ -28,6 +28,7 @@ import com.paychat.paychat.feature.contacts.AddContactScreen
 import com.paychat.paychat.feature.chat.ChatScreen
 import com.paychat.paychat.feature.contacts.ContactsScreen
 import com.paychat.paychat.feature.home.HomeScreen
+import com.paychat.paychat.feature.ledger.LedgerScreen
 import com.paychat.paychat.feature.transaction.AddTransactionScreen
 import com.paychat.paychat.feature.transaction.TransactionDetailScreen
 import com.paychat.paychat.ui.screens.PlaceholderScreen
@@ -169,7 +170,12 @@ fun PayChatNavHost(
                 Routes.LEDGER,
                 arguments = listOf(navArgument(NavArgs.THREAD_ID) { type = NavType.StringType })
             ) {
-                PlaceholderScreen("Ledger", "Phase 6", navController)
+                LedgerScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenTransaction = { txnId ->
+                        navController.navigate(Routes.transactionDetail(txnId))
+                    },
+                )
             }
             composable(
                 Routes.INHERITED_REVIEW,

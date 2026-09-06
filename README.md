@@ -7,9 +7,11 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 5 — transactions. The ledger works: money can be recorded in a chat,
-accepted, rejected, cancelled and corrected, and the balances are live.
-Remaining screens are placeholders that name the phase which replaces them.
+Phase 6 — statements. The ledger works end to end: money is recorded in a chat,
+accepted, rejected, cancelled or corrected; each conversation has a statement
+with a running balance; and the home screen shows real totals on a fresh
+install. Remaining screens are placeholders that name the phase which replaces
+them.
 
 The typing indicator listed in the specification is not built yet: it needs
 presence writes on every keystroke, which is worth designing alongside the
@@ -26,6 +28,7 @@ Implemented and unit tested:
 - `data/contacts/` — address book sync, account discovery, local contacts
 - `data/chat/` — messages, threads, receipts
 - `core/ledger/TransactionRules.kt` — who may accept, reject, cancel, correct
+- `core/ledger/LedgerStatement.kt` — running balance and closing balance
 - `data/media/` — photo and voice capture, signed Cloudinary upload
 - `data/transactions/` — recording, settling, correcting, balance recomputation
 - `data/sync/` — offline outbox
@@ -59,6 +62,20 @@ interface, never for trust.
 The client re-uploads a transaction in full on every retry, so the rules allow
 a write that changes nothing. Without that, a retry after a write that
 succeeded but whose response never arrived would be denied for ever.
+
+A balance is stored in its own table rather than on the conversation, because
+it belongs to the reader and not to the conversation: the same thread is a
+positive figure for one person and a negative one for the other. Keeping it
+separate also means a balance arriving from the server before the thread it
+belongs to is not thrown away.
+
+`LedgerStatement` builds the statement: each line carries the balance as it
+stood at that point. The running total is accumulated over every entry
+whatever the screen filters out, so hiding a rejected row cannot change the
+arithmetic of the rows around it, and the closing balance is taken from the
+accumulated total rather than from the first or last line, so reversing the
+display order cannot change the answer. The screen and the PDF export in phase
+8 both read it, so the two can never disagree about what the ledger says.
 
 ## How attachments work
 
@@ -202,7 +219,8 @@ files and exhaust the quota.
 ./gradlew testDebugUnitTest
 ```
 
-78 unit tests cover the money arithmetic, the balance and transaction rules,
+84 unit tests cover the money arithmetic, the balance, statement and
+transaction rules,
 phone
 normalisation, thread ids, input validation, address book normalisation,
 receipt mapping, upload request assembly, and timestamp formatting.

@@ -85,9 +85,6 @@ class ThreadsRepository @Inject constructor(
                     peerPhone = profile?.phone?.ifEmpty { null }
                         ?: thread.peerPhone.ifEmpty { existing?.peerPhone.orEmpty() },
                     peerPhotoUrl = profile?.photoUrl ?: existing?.peerPhotoUrl,
-                    // The balance is derived from transactions; a thread
-                    // document knows nothing about it, so never overwrite it.
-                    balanceMinor = existing?.balanceMinor ?: 0L,
                 )
             }
         )

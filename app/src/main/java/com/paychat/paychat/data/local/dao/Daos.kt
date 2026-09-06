@@ -9,6 +9,7 @@ import com.paychat.paychat.core.model.SyncState
 import com.paychat.paychat.data.local.entity.DeviceContactEntity
 import com.paychat.paychat.data.local.entity.LocalContactEntity
 import com.paychat.paychat.data.local.entity.MessageEntity
+import com.paychat.paychat.data.local.entity.ThreadBalanceEntity
 import com.paychat.paychat.data.local.entity.ThreadEntity
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.local.entity.UserEntity
@@ -54,12 +55,6 @@ interface ThreadDao {
     @Query("SELECT * FROM threads WHERE threadId = :threadId LIMIT 1")
     suspend fun byId(threadId: String): ThreadEntity?
 
-    @Query("UPDATE threads SET balanceMinor = :minor, updatedAt = :now WHERE threadId = :threadId")
-    suspend fun setBalance(threadId: String, minor: Long, now: Long)
-
-    @Query("SELECT balanceMinor FROM threads")
-    fun observeAllBalances(): Flow<List<Long>>
-
     @Query(
         """
         UPDATE threads
@@ -68,6 +63,19 @@ interface ThreadDao {
         """
     )
     suspend fun setLastMessage(threadId: String, preview: String, at: Long)
+}
+
+@Dao
+interface ThreadBalanceDao {
+    @Upsert suspend fun upsert(balance: ThreadBalanceEntity)
+
+    @Upsert suspend fun upsertAll(balances: List<ThreadBalanceEntity>)
+
+    @Query("SELECT * FROM thread_balances")
+    fun observeAll(): Flow<List<ThreadBalanceEntity>>
+
+    @Query("SELECT * FROM thread_balances WHERE threadId = :threadId")
+    fun observe(threadId: String): Flow<ThreadBalanceEntity?>
 }
 
 @Dao

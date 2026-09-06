@@ -38,9 +38,26 @@ data class ThreadEntity(
     val lastMessageText: String? = null,
     val lastMessageAt: Long = 0L,
     val unreadCount: Int = 0,
-    /** Cached, always recomputable from the transaction rows. */
-    val balanceMinor: Long = 0L,
     val updatedAt: Long = 0L,
+)
+
+/**
+ * What a conversation comes to, from this user's point of view.
+ *
+ * Kept apart from the thread because a balance belongs to the reader, not to
+ * the conversation: the same thread is a positive figure for one person and a
+ * negative one for the other. Keeping it here also means a balance arriving
+ * from the server before the thread it belongs to is not lost.
+ *
+ * Always recomputable from the transaction rows; this is a cache for the
+ * lists, so that the home screen does not have to load every transaction of
+ * every conversation.
+ */
+@Entity(tableName = "thread_balances")
+data class ThreadBalanceEntity(
+    @PrimaryKey val threadId: String,
+    val amountMinor: Long,
+    val updatedAt: Long,
 )
 
 @Entity(
