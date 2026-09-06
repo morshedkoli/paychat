@@ -10,3 +10,4 @@ export {
   pushOnTransactionResolved,
 } from "./notifications";
 export { remindDueTransactions } from "./reminders";
+export { fileReport } from "./reports";

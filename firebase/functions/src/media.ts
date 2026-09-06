@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
+import { enforceRateLimit } from "./limits";
 
 const cloudinaryApiKey = defineSecret("CLOUDINARY_API_KEY");
 const cloudinaryApiSecret = defineSecret("CLOUDINARY_API_SECRET");
@@ -31,7 +32,7 @@ export const signMediaUpload = onCall(
     region: "asia-south1",
     enforceAppCheck: false, // Turn on once App Check is configured.
   },
-  (request) => {
+  async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {
       throw new HttpsError("unauthenticated", "Sign in first.");
@@ -51,6 +52,17 @@ export const signMediaUpload = onCall(
     if (!Number.isFinite(bytes) || bytes <= 0 || bytes > MAX_BYTES[resourceType]) {
       throw new HttpsError("invalid-argument", "That file is too large.");
     }
+
+    // A signature is what lets a file reach the storage account, so the
+    // number handed out is capped. The ceiling is far above what sending
+    // photos and voice notes all day would reach.
+    await enforceRateLimit({
+      uid,
+      action: "upload",
+      limit: 120,
+      windowMs: 60 * 60 * 1000,
+      message: "Too many uploads in a short time. Try again later.",
+    });
 
     // The uid is part of the path, so a signature can only ever write into the
     // caller's own folder.

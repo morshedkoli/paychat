@@ -13,9 +13,6 @@ object Collections {
     const val TRANSACTIONS = "transactions"
     const val THREAD_BALANCES = "threadBalances"
     const val LOCAL_CONTACTS = "localContacts"
-
-    /** Where a report of abuse is filed. Nothing in the app reads it back. */
-    const val REPORTS = "reports"
 }
 
 object UserFields {

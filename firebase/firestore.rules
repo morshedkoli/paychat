@@ -39,10 +39,24 @@ service cloud.firestore {
       // Profiles are readable by any signed in user so that a chat can show a
       // name and picture. Nothing sensitive lives here.
       allow read: if signedIn();
+      // A profile is a handful of known fields. Refusing anything else
+      // stops the document being used as free storage, and stops a client
+      // writing a field the app would later read as if the server set it.
+      function validProfile() {
+        return incoming().name is string
+            && incoming().name.size() > 0
+            && incoming().name.size() <= 80
+            && incoming().keys().hasOnly([
+                 'phone', 'name', 'photoUrl', 'fcmToken',
+                 'activeSessionId', 'createdAt', 'updatedAt'
+               ]);
+      }
+
       allow create: if signedIn() && userId == uid()
-                    && incoming().name is string
+                    && validProfile()
                     && incoming().phone == verifiedPhone();
       allow update: if signedIn() && userId == uid()
+                    && validProfile()
                     // The phone number is fixed at registration.
                     && incoming().phone == existing().phone;
       allow delete: if false;
@@ -110,8 +124,24 @@ service cloud.firestore {
                  .data.get('blockedBy', []).size() == 0;
         }
 
+        // Size and shape. A message is small: anything much larger than a
+        // long paragraph is either a bug or an attempt to fill the database
+        // at the project's expense.
+        function validMessage() {
+          return incoming().type in ['TEXT', 'IMAGE', 'VOICE', 'TXN', 'SYSTEM']
+              && incoming().get('text', '').size() <= 4000
+              && incoming().createdAt is int
+              && incoming().keys().hasOnly([
+                   'senderId', 'type', 'text', 'mediaUrl', 'mediaPublicId',
+                   'durationMs', 'txnId', 'createdAt', 'deliveredTo', 'readBy'
+                 ]);
+        }
+
         allow read: if inThread();
-        allow create: if inThread() && notBlocked() && incoming().senderId == uid();
+        allow create: if inThread()
+                      && notBlocked()
+                      && incoming().senderId == uid()
+                      && validMessage();
         // Only receipt fields may change after a message is written.
         allow update: if inThread()
                       && incoming().diff(existing()).affectedKeys()
@@ -143,8 +173,19 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/threads/$(threadId)).data.isLocal == true;
         }
 
+        // An amount is poisha, so the ceiling is ten million taka on one
+        // entry. Anything larger is a slipped decimal point or an attempt to
+        // make a balance unreadable, and a real debt that size is not being
+        // settled through a chat app.
         function validAmount() {
-          return incoming().amountMinor is int && incoming().amountMinor > 0;
+          return incoming().amountMinor is int
+              && incoming().amountMinor > 0
+              && incoming().amountMinor <= 1000000000;
+        }
+
+        function validNote() {
+          return incoming().get('note', '').size() <= 500
+              && (incoming().get('dueDate', 0) is int);
         }
 
         function validDirection() {
@@ -177,6 +218,7 @@ service cloud.firestore {
                       && notBlocked()
                       && incoming().createdBy == uid()
                       && validAmount()
+                      && validNote()
                       && validDirection()
                       && validInitialStatus();
 
@@ -227,14 +269,21 @@ service cloud.firestore {
 
     // -------------------------------------------------------------- reports
 
-    // Filed by a user, read only by moderation tooling with admin
-    // credentials. Nothing in the app reads a report back, so nobody can
-    // enumerate who has been reported, and a report cannot be edited away
-    // once it is filed.
+    // Written only by the fileReport function, which checks that the
+    // reporter is in the thread and applies a rate limit — neither of which
+    // a rule can do. Clients cannot read reports either, so nobody can
+    // enumerate who has been reported.
     match /reports/{reportId} {
-      allow read: if false;
-      allow create: if signedIn() && incoming().reportedBy == uid();
-      allow update, delete: if false;
+      allow read, write: if false;
+    }
+
+    // ----------------------------------------------------------- limits
+
+    // The counters behind the server-side rate limits. A client that could
+    // write these could lift its own limit, and one that could read them
+    // would learn how close it was to the ceiling, so neither is allowed.
+    match /rateLimits/{key} {
+      allow read, write: if false;
     }
 
     // ------------------------------------------------- per-user subcollections

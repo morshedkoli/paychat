@@ -2,12 +2,12 @@ package com.paychat.paychat.data.moderation
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.local.dao.ThreadDao
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.ThreadFields
 import kotlinx.coroutines.tasks.await
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,6 +42,7 @@ enum class ReportReason {
 @Singleton
 class ModerationRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
+    private val functions: FirebaseFunctions,
     private val threadDao: ThreadDao,
     private val auth: AuthRepository,
 ) {
@@ -51,28 +52,28 @@ class ModerationRepository @Inject constructor(
     suspend fun unblock(threadId: String): Result<Unit> = setBlocked(threadId, blocked = false)
 
     /**
-     * Files a report. The thread id and the reason are enough for a moderator
-     * to read the conversation; the messages themselves are not copied.
+     * Files a report.
+     *
+     * A Cloud Function does the writing, because a report needs a rate limit
+     * and a check that the reporter is in the thread, and a security rule can
+     * do neither. The conversation is not copied: a moderator reads it from
+     * the thread id.
      */
     suspend fun report(
         threadId: String,
         reason: ReportReason,
         detail: String?,
     ): Result<Unit> = runCatching {
-        val uid = auth.currentUid ?: error("not signed in")
-        val thread = threadDao.byId(threadId)
-
-        firestore.collection(Collections.REPORTS).document(UUID.randomUUID().toString()).set(
-            mapOf(
-                "reportedBy" to uid,
-                "threadId" to threadId,
-                "reportedUid" to thread?.peerUid,
-                "reportedPhone" to thread?.peerPhone,
-                "reason" to reason.name,
-                "detail" to detail?.take(DETAIL_LIMIT),
-                "createdAt" to FieldValue.serverTimestamp(),
+        functions.getHttpsCallable(REPORT_FUNCTION)
+            .call(
+                mapOf(
+                    "threadId" to threadId,
+                    "reason" to reason.name,
+                    "detail" to detail,
+                )
             )
-        ).await()
+            .await()
+        Unit
     }
 
     private suspend fun setBlocked(threadId: String, blocked: Boolean): Result<Unit> = runCatching {
@@ -89,7 +90,6 @@ class ModerationRepository @Inject constructor(
     }
 
     private companion object {
-        /** A report is a pointer for a human, not an essay. */
-        const val DETAIL_LIMIT = 500
+        const val REPORT_FUNCTION = "fileReport"
     }
 }
