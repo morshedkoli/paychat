@@ -30,6 +30,7 @@ import com.paychat.paychat.feature.contacts.ContactsScreen
 import com.paychat.paychat.feature.home.HomeScreen
 import com.paychat.paychat.feature.inherited.InheritedReviewScreen
 import com.paychat.paychat.feature.ledger.LedgerScreen
+import com.paychat.paychat.feature.search.SearchScreen
 import com.paychat.paychat.feature.transaction.AddTransactionScreen
 import com.paychat.paychat.feature.transaction.TransactionDetailScreen
 import com.paychat.paychat.ui.screens.PlaceholderScreen
@@ -127,6 +128,7 @@ fun PayChatNavHost(
                     onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
                     onNewChat = { navController.navigate(Routes.CONTACTS) },
                     onSettings = { navController.navigate(Routes.SETTINGS) },
+                    onSearch = { navController.navigate(Routes.SEARCH) },
                     onReviewInherited = { threadId ->
                         navController.navigate(Routes.inheritedReview(threadId))
                     },
@@ -200,7 +202,13 @@ fun PayChatNavHost(
             }
 
             composable(Routes.SEARCH) {
-                PlaceholderScreen("Search", "Phase 8", navController)
+                SearchScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
+                    onOpenTransaction = { txnId ->
+                        navController.navigate(Routes.transactionDetail(txnId))
+                    },
+                )
             }
             composable(Routes.SETTINGS) {
                 PlaceholderScreen("Settings", "Phase 9", navController)

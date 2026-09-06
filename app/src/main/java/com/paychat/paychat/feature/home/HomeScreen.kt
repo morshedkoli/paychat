@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
@@ -59,6 +60,7 @@ fun HomeScreen(
     onOpenThread: (String) -> Unit,
     onNewChat: () -> Unit,
     onSettings: () -> Unit,
+    onSearch: () -> Unit,
     onReviewInherited: (String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -86,6 +88,9 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("PayChat") },
                 actions = {
+                    IconButton(onClick = onSearch) {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }

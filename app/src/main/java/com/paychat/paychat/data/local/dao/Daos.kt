@@ -120,6 +120,19 @@ interface MessageDao {
             "WHERE senderId != :viewerUid AND readAt IS NULL GROUP BY threadId"
     )
     fun observeUnreadCounts(viewerUid: String): Flow<List<ThreadCount>>
+
+    /**
+     * Text messages containing the pattern, newest first.
+     *
+     * LIKE with a leading wildcard cannot use an index, so the result is
+     * capped. Search here is for finding a conversation again, not for
+     * paging through a year of chat.
+     */
+    @Query(
+        "SELECT * FROM messages WHERE type = 'TEXT' AND text LIKE :pattern ESCAPE '\\' " +
+            "ORDER BY createdAt DESC LIMIT :limit"
+    )
+    suspend fun search(pattern: String, limit: Int): List<MessageEntity>
 }
 
 @Dao
@@ -139,6 +152,13 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE txnId = :txnId LIMIT 1")
     suspend fun byId(txnId: String): TransactionEntity?
+
+    /** Transactions whose note contains the pattern, newest first. */
+    @Query(
+        "SELECT * FROM transactions WHERE note LIKE :pattern ESCAPE '\\' " +
+            "ORDER BY createdAt DESC LIMIT :limit"
+    )
+    suspend fun search(pattern: String, limit: Int): List<TransactionEntity>
 
     @Query("UPDATE transactions SET syncState = :state WHERE txnId = :txnId")
     suspend fun setSyncState(txnId: String, state: SyncState)
