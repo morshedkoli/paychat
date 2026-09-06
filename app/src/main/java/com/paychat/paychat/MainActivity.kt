@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,11 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.paychat.paychat.data.notifications.PayChatMessagingService
 import com.paychat.paychat.data.settings.ThemeChoice
+import com.paychat.paychat.feature.lock.LockScreen
 import com.paychat.paychat.feature.settings.AppShellViewModel
 import com.paychat.paychat.ui.nav.PayChatNavHost
 import com.paychat.paychat.ui.theme.PayChatTheme
@@ -33,7 +35,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     /**
      * The conversation a tapped notification asked for, if any. Held as a flow
@@ -49,6 +51,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val shell: AppShellViewModel = hiltViewModel()
             val theme by shell.theme.collectAsStateWithLifecycle()
+            val locked by shell.locked.collectAsStateWithLifecycle()
+
+            // Leaving and returning is what arms the lock, so the shell has
+            // to hear about both.
+            LifecycleResumeEffect(Unit) {
+                shell.onForeground()
+                onPauseOrDispose { shell.onBackground() }
+            }
 
             PayChatTheme(darkTheme = theme.isDark()) {
                 RequestNotificationPermission()
@@ -62,6 +72,16 @@ class MainActivity : ComponentActivity() {
                         openThreadId = threadId,
                         onThreadOpened = { openThread.value = null },
                     )
+
+                    // Drawn over the graph rather than as a destination: the
+                    // app behind it keeps its place, and no back press can
+                    // reach past it.
+                    if (locked) {
+                        LockScreen(
+                            activity = this@MainActivity,
+                            onUnlocked = shell::unlocked,
+                        )
+                    }
                 }
             }
         }

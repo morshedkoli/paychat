@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.data.settings.ThemeChoice
+import com.paychat.paychat.feature.lock.canLock
 import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.components.shareStatement
 
@@ -66,6 +67,10 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // A phone with no PIN, pattern or fingerprint cannot ask for one, so the
+    // switch says why instead of producing a lock nobody can get past.
+    val lockAvailable = remember { canLock(context) }
 
     var editingName by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
@@ -131,12 +136,19 @@ fun SettingsScreen(
             ListItem(
                 headlineContent = { Text("App lock") },
                 supportingContent = {
-                    Text("Ask for your screen lock when PayChat comes back to the front.")
+                    Text(
+                        if (lockAvailable) {
+                            "Ask for your screen lock when PayChat comes back to the front."
+                        } else {
+                            "Set a screen lock on this phone first."
+                        }
+                    )
                 },
                 trailingContent = {
                     Switch(
                         checked = state.appLockEnabled,
                         onCheckedChange = viewModel::setAppLockEnabled,
+                        enabled = lockAvailable,
                     )
                 },
             )
