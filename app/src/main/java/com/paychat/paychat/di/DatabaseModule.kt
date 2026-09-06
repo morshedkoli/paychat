@@ -2,6 +2,7 @@ package com.paychat.paychat.di
 
 import android.content.Context
 import androidx.room.Room
+import com.paychat.paychat.data.local.PAYCHAT_MIGRATIONS
 import com.paychat.paychat.data.local.PayChatDatabase
 import com.paychat.paychat.data.local.dao.DeviceContactDao
 import com.paychat.paychat.data.local.dao.LocalContactDao
@@ -25,11 +26,13 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PayChatDatabase =
         Room.databaseBuilder(context, PayChatDatabase::class.java, PayChatDatabase.NAME)
-            // Pre-release only. Room holds a cache of Firestore plus anything
-            // still waiting to sync, so wiping it would discard unsent
-            // messages and transactions. Replace with real migrations before
-            // the first Play Store build (phase 10).
-            .fallbackToDestructiveMigration()
+            .addMigrations(*PAYCHAT_MIGRATIONS)
+            // Version 1 was never exported and only ever existed on
+            // development machines, so it is the one version rebuilt from
+            // scratch. Every later version migrates: the database holds
+            // messages and transactions that have not reached the server yet,
+            // and wiping it on an update would lose money already recorded.
+            .fallbackToDestructiveMigrationFrom(1)
             .build()
 
     @Provides fun provideUserDao(db: PayChatDatabase): UserDao = db.userDao()
