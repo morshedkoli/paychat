@@ -7,16 +7,19 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 8 — notifications, statements, and search. Messages, transactions and
-transaction decisions raise a push, a due date raises a reminder the day
-before, any conversation exports as a PDF statement, and one box searches
-people, message text and transaction notes. Settings is the last placeholder,
-and it names the phase which replaces it.
+Phase 9 — settings, app lock, blocking, and the rough edges. Every screen in
+the specification is now built. Settings carries the profile, the colour
+scheme, the lock, and the export; the app can be locked behind the phone's own
+screen lock; a conversation can be blocked or reported without touching what
+it records; failures speak in one voice and empty screens have one shape.
 
-The typing indicator listed in the specification is still not built: it needs
-a presence write on every keystroke, which is a different problem from the
-server-sent notifications built here and is better designed with app lock and
-the rest of the settings work in phase 9.
+The typing indicator listed in the specification is still not built. It needs
+a presence write on every keystroke, which is a cost worth measuring against
+the abuse limits in phase 10 rather than adding blind.
+
+What phase 10 still owes: real Room migrations in place of the destructive
+one, rules hardening and abuse limits, data export and account deletion, and
+the Play Store release build.
 
 Implemented and unit tested:
 
@@ -36,6 +39,9 @@ Implemented and unit tested:
 - `data/notifications/` — push tokens, data-only pushes, deep link to the chat
 - `data/export/` — on-device PDF statements, per thread and across all threads
 - `data/search/` — search over people, messages, and transaction notes
+- `data/settings/` — theme and lock preferences, and the lock itself
+- `data/moderation/` — blocking a conversation, and reporting one
+- `core/errors/UserMessage.kt` — one sentence per failure, never a status code
 - `firebase/firestore.rules` — every ledger invariant from the spec
 
 ## How the ledger works
@@ -147,6 +153,23 @@ printing them would invite someone to read a figure that was never owed.
 Search is answered entirely from Room. The device already holds every message
 and transaction it may see, so search works offline and needs no server-side
 index — Firestore could not run the query without one.
+
+## Locking, blocking, and reporting
+
+The app lock is the phone's own: a fingerprint, a face, or the screen lock
+PIN. PayChat stores no PIN of its own, so there is no second secret to forget
+and nothing worth stealing from the app's storage. It arms after the app has
+been away for half a minute, because taking a photo or answering a
+notification is a detour rather than an absence; a cold start locks straight
+away.
+
+Blocking closes a conversation in both directions, and changes nothing else.
+The history and the balance stay exactly as they were. The flag lives on the
+thread document, because the security rules have to see it to refuse the other
+side's writes, and a member may add or remove only their own uid.
+
+Reports are create-only and unreadable by clients: nobody can enumerate who
+has been reported, and nothing can be edited away once filed.
 
 ## Contacts and privacy
 
