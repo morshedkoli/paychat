@@ -61,15 +61,23 @@ value stops matching its own.
 
 ## Opening the project
 
-The project has no Gradle wrapper checked in yet, because it was scaffolded
-without an Android SDK present.
+1. Copy `local.properties.sample` to `local.properties` and set `sdk.dir` to
+   your Android SDK. Use forward slashes (`D:/android-sdk`) — a backslash is an
+   escape character in a properties file and silently mangles the path.
+2. Create the Firebase project (see below) and put the real
+   `google-services.json` in `app/`. The build will not configure without one.
+3. Open in Android Studio, or build from the command line:
 
-1. Open the folder in Android Studio (Ladybug or newer). Android Studio will
-   offer to generate the wrapper and sync.
-   Alternatively, with a local Gradle 8.9+ installed, run `gradle wrapper`.
-2. Copy `local.properties.sample` to `local.properties` and set `sdk.dir`.
-3. Create the Firebase project (see below) and drop `google-services.json` into
-   `app/`. The build will not sync without it.
+```bash
+./gradlew assembleDebug
+```
+
+Requires JDK 17, Android SDK platform 35 and build-tools 35.0.0. The Gradle
+wrapper (8.11.1) is checked in.
+
+> A placeholder `google-services.json` is enough to compile, but the app cannot
+> reach Firebase with it. `app/google-services.json` is gitignored, so it never
+> reaches the repository either way.
 
 ## Firebase setup
 
@@ -103,8 +111,11 @@ firebase deploy --only firestore:rules,firestore:indexes
 ## Running the tests
 
 ```bash
-./gradlew test
+./gradlew testDebugUnitTest
 ```
+
+44 unit tests cover the money arithmetic, the balance rules, phone
+normalisation, thread ids, input validation, and address book normalisation.
 
 ## Layout
 

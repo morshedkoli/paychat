@@ -3,6 +3,7 @@ package com.paychat.koli.di
 import android.content.Context
 import androidx.room.Room
 import com.paychat.koli.data.local.PayChatDatabase
+import com.paychat.koli.data.local.dao.DeviceContactDao
 import com.paychat.koli.data.local.dao.LocalContactDao
 import com.paychat.koli.data.local.dao.MessageDao
 import com.paychat.koli.data.local.dao.ThreadDao
@@ -27,7 +28,7 @@ object DatabaseModule {
             // still waiting to sync, so wiping it would discard unsent
             // messages and transactions. Replace with real migrations before
             // the first Play Store build (phase 10).
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .fallbackToDestructiveMigration()
             .build()
 
     @Provides fun provideUserDao(db: PayChatDatabase): UserDao = db.userDao()
@@ -35,4 +36,5 @@ object DatabaseModule {
     @Provides fun provideMessageDao(db: PayChatDatabase): MessageDao = db.messageDao()
     @Provides fun provideTransactionDao(db: PayChatDatabase): TransactionDao = db.transactionDao()
     @Provides fun provideLocalContactDao(db: PayChatDatabase): LocalContactDao = db.localContactDao()
+    @Provides fun provideDeviceContactDao(db: PayChatDatabase): DeviceContactDao = db.deviceContactDao()
 }

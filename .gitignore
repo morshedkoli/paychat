@@ -4,6 +4,7 @@
 /.idea/
 .DS_Store
 /build
+/app/build
 /captures
 .externalNativeBuild
 .cxx
@@ -11,3 +12,4 @@ local.properties
 /app/google-services.json
 /firebase/.firebase/
 /firebase/functions/node_modules/
+/app/schemas/*.json.bak
