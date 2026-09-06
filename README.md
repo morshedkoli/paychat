@@ -7,14 +7,16 @@ Full specification and build plan: [docs/SPEC.md](docs/SPEC.md).
 
 ## Status
 
-Phase 7 — handover. The ledger works end to end, and money recorded against a
-phone number before its owner registered now follows them to their new
-account for review. Remaining screens are placeholders that name the phase
-which replaces them.
+Phase 8 — notifications, statements, and search. Messages, transactions and
+transaction decisions raise a push, a due date raises a reminder the day
+before, any conversation exports as a PDF statement, and one box searches
+people, message text and transaction notes. Settings is the last placeholder,
+and it names the phase which replaces it.
 
-The typing indicator listed in the specification is not built yet: it needs
-presence writes on every keystroke, which is worth designing alongside the
-notification work in phase 8 rather than bolting on here.
+The typing indicator listed in the specification is still not built: it needs
+a presence write on every keystroke, which is a different problem from the
+server-sent notifications built here and is better designed with app lock and
+the rest of the settings work in phase 9.
 
 Implemented and unit tested:
 
@@ -31,6 +33,9 @@ Implemented and unit tested:
 - `data/media/` — photo and voice capture, signed Cloudinary upload
 - `data/transactions/` — recording, settling, correcting, balance recomputation
 - `data/sync/` — offline outbox
+- `data/notifications/` — push tokens, data-only pushes, deep link to the chat
+- `data/export/` — on-device PDF statements, per thread and across all threads
+- `data/search/` — search over people, messages, and transaction notes
 - `firebase/firestore.rules` — every ledger invariant from the spec
 
 ## How the ledger works
@@ -73,8 +78,8 @@ stood at that point. The running total is accumulated over every entry
 whatever the screen filters out, so hiding a rejected row cannot change the
 arithmetic of the rows around it, and the closing balance is taken from the
 accumulated total rather than from the first or last line, so reversing the
-display order cannot change the answer. The screen and the PDF export in phase
-8 both read it, so the two can never disagree about what the ledger says.
+display order cannot change the answer. The screen and the PDF export both
+read it, so the two can never disagree about what the ledger says.
 
 ## How attachments work
 
@@ -120,6 +125,28 @@ that makes them readable: on a message the user sent they describe what the
 the user themselves read it, which is what the unread badge counts. Every
 message lists its own sender in both arrays, so the mapper ignores the sender's
 own entry — otherwise every message would show as read the moment it was sent.
+
+## Notifications and statements
+
+Pushes are data-only, so the app draws every notification itself. A payload
+the system drew for us could not be suppressed for the conversation already on
+screen, and would lose the tap target that opens the right chat. The chat
+screen reports itself as visible on resume and hidden on pause, so a chat left
+open behind another app still notifies.
+
+One device holds the account, so the user document holds one token. Signing
+out deletes it, and a token the transport rejects is deleted rather than
+retried, since it belongs to an app that is no longer installed. A daily job
+scans a one day window for due dates and reminds both parties.
+
+Statements are drawn on the device with Android's own PdfDocument, so an
+export works offline and costs nothing to run. They list accepted
+transactions only: pending, rejected and cancelled entries carry no money, and
+printing them would invite someone to read a figure that was never owed.
+
+Search is answered entirely from Room. The device already holds every message
+and transaction it may see, so search works offline and needs no server-side
+index — Firestore could not run the query without one.
 
 ## Contacts and privacy
 
@@ -213,6 +240,8 @@ wrapper (8.11.1) is checked in.
    registration handover trigger, due-date reminders, and Cloudinary upload
    signing. Blaze keeps the free quota tiers, so low volume costs nothing, but a
    billing account must be attached.
+   Deploying the reminder job also enables Cloud Scheduler on the project the
+   first time it runs.
 6. Deploy the rules and indexes:
 
 ```bash
@@ -271,5 +300,10 @@ firebase deploy --only functions
 ```
 
 The secrets live in Secret Manager, never in the repository and never in the
-app. `signMediaUpload` is deployed to `asia-south1`; change the region in
-`firebase/functions/src/index.ts` if your users are elsewhere.
+app. Every function is deployed to `asia-south1`; change the region constant
+in each source file under `firebase/functions/src/` if your users are
+elsewhere.
+
+The deployed functions are `signMediaUpload`, `attachHistoryOnRegistration`,
+the three notification triggers, and `remindDueTransactions`, which runs at
+18:00 Asia/Dhaka.

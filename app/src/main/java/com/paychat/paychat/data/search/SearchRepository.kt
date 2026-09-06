@@ -69,7 +69,7 @@ class SearchRepository @Inject constructor(
         val query = rawQuery.trim()
         if (query.length < MIN_QUERY) return@withContext SearchResults(query = query)
 
-        val pattern = "%" + escapeLike(query) + "%"
+        val pattern = LikePattern.containing(query)
         val threads = threadDao.all().associateBy { it.threadId }
         val needle = query.lowercase(Locale.getDefault())
 
@@ -127,15 +127,6 @@ class SearchRepository @Inject constructor(
         const val MIN_QUERY = 2
 
         const val LIMIT = 50
-
-        /**
-         * The wildcards LIKE understands are literal characters to someone
-         * searching for a note that contains them.
-         */
-        fun escapeLike(text: String): String = text
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
     }
 }
 
