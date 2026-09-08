@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class PhoneEntryUiState(
+    /** ISO region of the chosen country; the number is parsed against it. */
+    val region: String = PhoneNumbers.DEFAULT_REGION,
     val phone: String = "",
     val phoneError: String? = null,
     val checking: Boolean = false,
@@ -36,11 +38,14 @@ class PhoneEntryViewModel @Inject constructor(
     fun onPhoneChange(value: String) =
         _state.update { it.copy(phone = value, phoneError = null) }
 
+    fun onRegionChange(region: String) =
+        _state.update { it.copy(region = region, phoneError = null) }
+
     fun submit() {
         val current = _state.value
         if (current.checking) return
 
-        val e164 = phoneNumbers.toE164(current.phone)
+        val e164 = phoneNumbers.toE164(current.phone, current.region)
         if (e164 == null) {
             _state.update { it.copy(phoneError = "Enter a valid phone number.") }
             return

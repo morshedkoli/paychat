@@ -24,7 +24,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.ui.components.FormError
 import com.paychat.paychat.ui.components.NameField
-import com.paychat.paychat.ui.components.PhoneField
+import com.paychat.paychat.ui.components.PhoneNumberField
 import com.paychat.paychat.ui.components.PrimaryButton
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,9 +76,11 @@ fun AddContactScreen(
                 error = state.nameError,
                 enabled = !state.submitting,
             )
-            PhoneField(
-                value = state.phone,
-                onValueChange = viewModel::onPhoneChange,
+            PhoneNumberField(
+                region = state.region,
+                national = state.phone,
+                onRegionChange = viewModel::onRegionChange,
+                onNationalChange = viewModel::onPhoneChange,
                 error = state.phoneError,
                 enabled = !state.submitting,
                 imeAction = ImeAction.Done,

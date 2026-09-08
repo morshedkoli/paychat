@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
@@ -15,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,32 +30,30 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
+/**
+ * The corner radius every text field in the app shares.
+ *
+ * Deliberately between the 24dp of the cards fields sit inside and the fully
+ * rounded primary button below them, so the three read as one family instead
+ * of three unrelated shapes stacked up.
+ */
+internal val FieldShape = RoundedCornerShape(14.dp)
+
+/**
+ * The colours every text field in the app shares.
+ *
+ * A tinted container is what separates an input from the card behind it; the
+ * default hairline outline alone disappears against white.
+ */
 @Composable
-fun PhoneField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    label: String = "Phone number",
-    error: String? = null,
-    enabled: Boolean = true,
-    imeAction: ImeAction = ImeAction.Next,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { onValueChange(it.filter { c -> c.isDigit() || c == '+' }) },
-        modifier = modifier.fillMaxWidth(),
-        label = { Text(label) },
-        placeholder = { Text("01712345678") },
-        singleLine = true,
-        enabled = enabled,
-        isError = error != null,
-        supportingText = error?.let { { Text(it) } },
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Phone,
-            imeAction = imeAction,
-        ),
-    )
-}
+internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+    errorContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+)
 
 @Composable
 fun PasswordField(
@@ -80,6 +80,8 @@ fun PasswordField(
         } else {
             PasswordVisualTransformation()
         },
+        shape = FieldShape,
+        colors = fieldColors(),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Password,
             imeAction = imeAction,
@@ -112,6 +114,8 @@ fun NameField(
         enabled = enabled,
         isError = error != null,
         supportingText = error?.let { { Text(it) } },
+        shape = FieldShape,
+        colors = fieldColors(),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Text,
             imeAction = ImeAction.Next,
@@ -136,6 +140,8 @@ fun OtpField(
         enabled = enabled,
         isError = error != null,
         supportingText = error?.let { { Text(it) } },
+        shape = FieldShape,
+        colors = fieldColors(),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.NumberPassword,
             imeAction = ImeAction.Done,

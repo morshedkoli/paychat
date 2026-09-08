@@ -19,6 +19,8 @@ import javax.inject.Inject
 
 data class AddContactUiState(
     val name: String = "",
+    /** ISO region of the chosen country; the number is parsed against it. */
+    val region: String = PhoneNumbers.DEFAULT_REGION,
     val phone: String = "",
     val nameError: String? = null,
     val phoneError: String? = null,
@@ -47,6 +49,11 @@ class AddContactViewModel @Inject constructor(
         scheduleNumberCheck()
     }
 
+    fun onRegionChange(region: String) {
+        _state.update { it.copy(region = region, phoneError = null, peerIsRegistered = null) }
+        scheduleNumberCheck()
+    }
+
     /**
      * Tells the user whether this number already has an account, so they know
      * before saving whether transactions will need the other side to accept.
@@ -56,7 +63,7 @@ class AddContactViewModel @Inject constructor(
      */
     private fun scheduleNumberCheck() {
         lookupJob?.cancel()
-        val e164 = phoneNumbers.toE164(_state.value.phone) ?: return
+        val e164 = phoneNumbers.toE164(_state.value.phone, _state.value.region) ?: return
         lookupJob = viewModelScope.launch {
             delay(LOOKUP_DEBOUNCE_MS)
             contacts.findAccountByPhone(e164).onSuccess { uid ->
@@ -70,7 +77,7 @@ class AddContactViewModel @Inject constructor(
         if (current.submitting) return
 
         val nameError = Validators.validateName(current.name)?.message()
-        val e164 = phoneNumbers.toE164(current.phone)
+        val e164 = phoneNumbers.toE164(current.phone, current.region)
         val phoneError = if (e164 == null) "Enter a valid phone number." else null
 
         if (nameError != null || phoneError != null) {

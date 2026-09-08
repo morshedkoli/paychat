@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -27,7 +30,7 @@ import com.paychat.paychat.feature.auth.AuthBackdrop
 import com.paychat.paychat.feature.auth.AuthHero
 import com.paychat.paychat.feature.auth.LightCardScheme
 import com.paychat.paychat.feature.auth.StaggeredEntrance
-import com.paychat.paychat.ui.components.PhoneField
+import com.paychat.paychat.ui.components.PhoneNumberField
 import com.paychat.paychat.ui.components.PrimaryButton
 
 /**
@@ -82,6 +85,7 @@ fun PhoneEntryScreen(
                     .fillMaxSize()
                     .padding(inner)
                     .imePadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
@@ -101,9 +105,11 @@ fun PhoneEntryScreen(
                             tonalElevation = 2.dp,
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
-                                PhoneField(
-                                    value = state.phone,
-                                    onValueChange = viewModel::onPhoneChange,
+                                PhoneNumberField(
+                                    region = state.region,
+                                    national = state.phone,
+                                    onRegionChange = viewModel::onRegionChange,
+                                    onNationalChange = viewModel::onPhoneChange,
                                     error = state.phoneError,
                                     enabled = !state.checking,
                                     imeAction = ImeAction.Done,
@@ -121,7 +127,9 @@ fun PhoneEntryScreen(
                     )
                 }
 
-                Spacer(Modifier.weight(1f))
+                // A plain gap, not weight: a weighted spacer would let the
+                // keyboard squeeze the button above it into a sliver.
+                Spacer(Modifier.height(24.dp))
             }
         }
     }

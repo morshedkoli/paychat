@@ -31,6 +31,19 @@ class PhoneNumbersTest {
     }
 
     @Test
+    fun `the same digits mean different numbers in different countries`() {
+        // Why the country has to be chosen rather than assumed: these digits
+        // are a real number in both places, and guessing picks the wrong one.
+        assertEquals("+442071838750", phoneNumbers.toE164("020 7183 8750", "GB"))
+        assertEquals("+12027183875", phoneNumbers.toE164("202 718 3875", "US"))
+    }
+
+    @Test
+    fun `a national number is rejected under the wrong country`() {
+        assertNull(phoneNumbers.toE164("01712345678", "US"))
+    }
+
+    @Test
     fun `rejects a number that is not valid`() {
         assertNull(phoneNumbers.toE164("12345"))
         assertNull(phoneNumbers.toE164(""))
