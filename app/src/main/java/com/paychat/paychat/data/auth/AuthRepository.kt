@@ -9,6 +9,8 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.PhoneIndexFields
 import com.paychat.paychat.data.remote.UserFields
@@ -16,6 +18,10 @@ import com.paychat.paychat.data.session.SessionStore
 import kotlinx.coroutines.tasks.await
 import java.io.IOException
 import java.util.UUID
+import com.paychat.paychat.data.local.PayChatDatabase
+import com.paychat.paychat.data.sync.OutboxScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,7 +43,10 @@ data class AuthedUser(
 class AuthRepository @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
+    private val functions: FirebaseFunctions,
     private val session: SessionStore,
+    private val database: PayChatDatabase,
+    private val outbox: OutboxScheduler,
 ) {
 
     val currentUid: String? get() = auth.currentUser?.uid
@@ -160,9 +169,39 @@ class AuthRepository @Inject constructor(
         session.save(uid = user.uid, phone = phoneE164, sessionId = sessionId)
     }
 
+    /**
+     * Whether [phoneE164] already has an account.
+     *
+     * `phoneIndex` is not readable while signed out — making it public would
+     * leak which numbers use the app — so the question goes to a callable that
+     * reads it with admin credentials and answers with one bit.
+     *
+     * This is a hint for the signed out flow, never a decision: whichever
+     * branch it sends someone down, [completeRegistration] still refuses a
+     * number that is taken and [signIn] still refuses one that is not.
+     */
+    suspend fun phoneExists(phoneE164: String): Result<Boolean> = runCatchingAuth {
+        val response = functions.getHttpsCallable(LOOKUP_FUNCTION)
+            .call(mapOf("phone" to phoneE164))
+            .await()
+
+        @Suppress("UNCHECKED_CAST")
+        val data = response.getData() as? Map<String, Any?>
+            ?: error("phoneLookup returned no data")
+        data["exists"] as? Boolean ?: error("phoneLookup returned no exists flag")
+    }
+
     suspend fun signOut() {
         auth.signOut()
         session.clear()
+        outbox.cancel()
+        withContext(Dispatchers.IO) {
+            database.clearAllTables()
+        }
+    }
+
+    private companion object {
+        const val LOOKUP_FUNCTION = "phoneLookup"
     }
 }
 
@@ -190,6 +229,16 @@ private inline fun <T> runCatchingAuth(block: () -> T): Result<T> = try {
         "ERROR_INVALID_VERIFICATION_CODE" -> AuthError.InvalidOtp
         "ERROR_SESSION_EXPIRED" -> AuthError.OtpExpired
         else -> AuthError.WrongPassword
+    }
+    Result.failure(AuthException(error))
+} catch (e: FirebaseFunctionsException) {
+    // A callable reports "too many" as RESOURCE_EXHAUSTED; everything else it
+    // can fail with is either a bug or the network.
+    val error = when (e.code) {
+        FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED -> AuthError.TooManyRequests
+        FirebaseFunctionsException.Code.UNAVAILABLE,
+        FirebaseFunctionsException.Code.DEADLINE_EXCEEDED -> AuthError.Network
+        else -> AuthError.Unknown(e.message)
     }
     Result.failure(AuthException(error))
 } catch (e: IOException) {
