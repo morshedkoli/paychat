@@ -14,7 +14,8 @@ object Routes {
     const val CONTACTS = "contacts"
     const val ADD_CONTACT = "contacts/add"
     const val CHAT = "chat/{threadId}"
-    const val ADD_TRANSACTION = "chat/{threadId}/transaction/new"
+    const val ADD_TRANSACTION =
+        "chat/{threadId}/transaction/new?direction={direction}&amount={amount}&note={note}&category={category}"
     const val TRANSACTION_DETAIL = "transaction/{txnId}"
     const val LEDGER = "chat/{threadId}/ledger"
     const val INHERITED_REVIEW = "inherited/{threadId}"
@@ -32,13 +33,29 @@ object Routes {
         "otp/${phoneE164.removePrefix("+")}/$purpose"
 
     fun chat(threadId: String) = "chat/$threadId"
-    fun addTransaction(threadId: String) = "chat/$threadId/transaction/new"
+
+    fun addTransaction(
+        threadId: String,
+        direction: String? = null,
+        amount: String? = null,
+        note: String? = null,
+        category: String? = null,
+    ): String {
+        val params = mutableListOf<String>()
+        if (direction != null) params += "direction=$direction"
+        if (amount != null) params += "amount=$amount"
+        if (note != null) params += "note=$note"
+        if (category != null) params += "category=$category"
+        return if (params.isEmpty()) "chat/$threadId/transaction/new"
+        else "chat/$threadId/transaction/new?${params.joinToString("&")}"
+    }
+
     fun transactionDetail(txnId: String) = "transaction/$txnId"
     fun ledger(threadId: String) = "chat/$threadId/ledger"
     fun inheritedReview(threadId: String) = "inherited/$threadId"
 
     /** Destinations that make up the signed out flow. */
-    val AUTH_ROUTES = setOf(SPLASH, REGISTER, LOGIN, OTP)
+    val AUTH_ROUTES = setOf(REGISTER, LOGIN, OTP)
 }
 
 object NavArgs {
@@ -46,4 +63,8 @@ object NavArgs {
     const val PURPOSE = "purpose"
     const val THREAD_ID = "threadId"
     const val TXN_ID = "txnId"
+    const val DIRECTION = "direction"
+    const val AMOUNT = "amount"
+    const val NOTE = "note"
+    const val CATEGORY = "category"
 }
