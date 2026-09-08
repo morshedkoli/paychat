@@ -12,6 +12,9 @@ import { HttpsError } from "firebase-functions/v2/https";
  * The window is fixed rather than sliding. A sliding window would need every
  * timestamp kept, and the point is to stop a flood, not to meter usage to the
  * second.
+ *
+ * The `uid` is just the counter key. Signed out callers have no uid, so
+ * `phoneLookup` passes `ip:<address>` and `phone:<e164>` instead.
  */
 export async function enforceRateLimit(options: {
   uid: string;

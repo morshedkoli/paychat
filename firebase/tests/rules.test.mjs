@@ -99,6 +99,67 @@ describe("threads", () => {
   it("a member cannot block on somebody else's behalf", async () => {
     await assertFails(updateDoc(doc(as(ALICE), "threads", THREAD), { blockedBy: [BOB] }));
   });
+
+  it("a one-sided thread is created with only its owner", async () => {
+    await assertSucceeds(
+      setDoc(doc(as(ALICE), "threads", "alice_local_c1"), {
+        members: [ALICE],
+        isLocal: true,
+        localContact: { name: "Rana", phone: "+8801700000009" },
+        updatedAt: 1,
+      })
+    );
+  });
+
+  // Without this a caller could mark a two-party thread one-sided, which is
+  // the branch that lets a SENT claim start accepted instead of pending.
+  it("a two-party thread cannot be created as one-sided", async () => {
+    await assertFails(
+      setDoc(doc(as(ALICE), "threads", "alice_local_c2"), {
+        members: [ALICE, BOB],
+        isLocal: true,
+        updatedAt: 1,
+      })
+    );
+  });
+
+  it("a one-sided thread cannot be created for somebody else", async () => {
+    await assertFails(
+      setDoc(doc(as(ALICE), "threads", "bob_local_c3"), {
+        members: [BOB],
+        isLocal: true,
+        updatedAt: 1,
+      })
+    );
+  });
+
+  it("a client cannot forge a departure", async () => {
+    await assertFails(updateDoc(doc(as(ALICE), "threads", THREAD), { departed: [BOB] }));
+  });
+
+  it("a client cannot forge a handover", async () => {
+    await assertFails(updateDoc(doc(as(ALICE), "threads", THREAD), { promotedAt: 5 }));
+  });
+
+  it("a thread cannot change from one-sided to two-party", async () => {
+    await assertFails(updateDoc(doc(as(ALICE), "threads", THREAD), { isLocal: true }));
+  });
+
+  it("an unknown field on a thread is refused", async () => {
+    await assertFails(updateDoc(doc(as(ALICE), "threads", THREAD), { admin: true }));
+  });
+
+  it("a member may announce that they are typing", async () => {
+    await assertSucceeds(
+      updateDoc(doc(as(ALICE), "threads", THREAD), { typing: { [ALICE]: 1000 } })
+    );
+  });
+
+  it("a member cannot type on somebody else's behalf", async () => {
+    await assertFails(
+      updateDoc(doc(as(ALICE), "threads", THREAD), { typing: { [BOB]: 1000 } })
+    );
+  });
 });
 
 describe("messages", () => {
@@ -236,12 +297,82 @@ describe("transactions", () => {
       updateDoc(doc(as(ALICE), "threads", THREAD, "transactions", "t1"), {
         unconfirmed: false,
         status: "ACCEPTED",
+        resolvedBy: ALICE,
       })
     );
     await assertSucceeds(
       updateDoc(doc(as(BOB), "threads", THREAD, "transactions", "t1"), {
         unconfirmed: false,
         status: "ACCEPTED",
+        resolvedBy: BOB,
+      })
+    );
+  });
+
+  // `unconfirmed` keeps an entry out of the other person's balance. On a real
+  // thread there is no history to inherit, so an author who could set it would
+  // be recording a repayment that never reached the payer's figures.
+  it("an entry on a real thread cannot start unconfirmed", async () => {
+    await assertFails(
+      setDoc(
+        doc(as(ALICE), "threads", THREAD, "transactions", "t1"),
+        transaction(ALICE, { direction: "RECEIVED", status: "ACCEPTED", unconfirmed: true })
+      )
+    );
+  });
+
+  it("accepting cannot rewrite the note in the same write", async () => {
+    await setDoc(
+      doc(as(ALICE), "threads", THREAD, "transactions", "t1"),
+      transaction(ALICE, { note: "lunch" })
+    );
+
+    await assertFails(
+      updateDoc(doc(as(BOB), "threads", THREAD, "transactions", "t1"), {
+        status: "ACCEPTED",
+        resolvedBy: BOB,
+        note: "rent",
+      })
+    );
+  });
+
+  it("an unknown field on a transaction is refused", async () => {
+    await assertFails(
+      setDoc(
+        doc(as(ALICE), "threads", THREAD, "transactions", "t1"),
+        transaction(ALICE, { settled: true })
+      )
+    );
+  });
+
+  // A correction that the counterparty refuses leaves the original standing,
+  // so the pointer to it has to come off again or the entry could never be
+  // corrected a second time.
+  it("a refused correction releases the entry to be corrected again", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), "threads", THREAD, "transactions", "t1"),
+        transaction(ALICE, { status: "ACCEPTED", reversedBy: "t2" })
+      );
+    });
+
+    await assertSucceeds(
+      updateDoc(doc(as(ALICE), "threads", THREAD, "transactions", "t1"), { reversedBy: null })
+    );
+  });
+
+  it("a correction pointer cannot carry another change with it", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), "threads", THREAD, "transactions", "t1"),
+        transaction(ALICE, { status: "ACCEPTED" })
+      );
+    });
+
+    await assertFails(
+      updateDoc(doc(as(ALICE), "threads", THREAD, "transactions", "t1"), {
+        reversedBy: "t2",
+        status: "CANCELLED",
       })
     );
   });
@@ -291,6 +422,16 @@ describe("identity", () => {
       setDoc(doc(as(MALLORY, "+8801700000009"), "phoneIndex", "+8801700000009"), {
         uid: MALLORY,
       })
+    );
+  });
+
+  it("a signed out client cannot read the phone index", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "phoneIndex", "+8801700000001"), { uid: ALICE });
+    });
+
+    await assertFails(
+      getDoc(doc(testEnv.unauthenticatedContext().firestore(), "phoneIndex", "+8801700000001"))
     );
   });
 

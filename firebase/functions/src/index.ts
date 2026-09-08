@@ -12,3 +12,4 @@ export {
 export { remindDueTransactions } from "./reminders";
 export { fileReport } from "./reports";
 export { deleteAccount } from "./account";
+export { phoneLookup } from "./phoneLookup";
