@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -161,6 +162,17 @@ fun PrimaryButton(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().height(52.dp),
         enabled = enabled && !loading,
+        // A button that is busy still has to look like a button. The default
+        // disabled fill is nearly invisible on the signed-out backdrop, so
+        // waiting looked like the button had vanished.
+        colors = ButtonDefaults.buttonColors(
+            disabledContainerColor = MaterialTheme.colorScheme.primary.copy(
+                alpha = if (loading) 0.75f else 0.35f
+            ),
+            disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(
+                alpha = if (loading) 1f else 0.6f
+            ),
+        ),
     ) {
         if (loading) {
             Row(

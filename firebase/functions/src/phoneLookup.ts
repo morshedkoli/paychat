@@ -1,3 +1,4 @@
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { enforceRateLimit } from "./limits";
@@ -50,7 +51,38 @@ export const phoneLookup = onCall(
       message: "Too many attempts. Try again in a while.",
     });
 
-    const snapshot = await getFirestore().collection("phoneIndex").doc(phone).get();
-    return { exists: snapshot.exists };
+    return { exists: await accountExists(phone) };
   }
 );
+
+/**
+ * Whether anything would stop this number registering again.
+ *
+ * Firebase Auth is asked first because it is the authority registration
+ * itself collides against: `completeRegistration` signs in with the phone
+ * credential and refuses when the account is not new. An account can exist
+ * in Auth with no `phoneIndex` document behind it - a registration that
+ * failed after the credential was created, or an account made before this
+ * index existed - and answering from the index alone sent those people to
+ * registration only to be turned away after they had waited for an SMS.
+ *
+ * The index is still consulted, so a profile whose Auth user was removed
+ * out of band does not read as free either.
+ */
+async function accountExists(phone: string): Promise<boolean> {
+  try {
+    await getAuth().getUserByPhoneNumber(phone);
+    return true;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code !== "auth/user-not-found") {
+      // Anything else - a network blip, a permission problem - must not be
+      // reported as "this number is free". Saying so would send someone into
+      // registration to fail at the far end again.
+      throw new HttpsError("unavailable", "Could not check that number.");
+    }
+  }
+
+  const snapshot = await getFirestore().collection("phoneIndex").doc(phone).get();
+  return snapshot.exists;
+}

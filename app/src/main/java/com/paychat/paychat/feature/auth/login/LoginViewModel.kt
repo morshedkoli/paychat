@@ -65,7 +65,17 @@ class LoginViewModel @Inject constructor(
                 onFailure = { throwable ->
                     val error = (throwable as? AuthException)?.error
                         ?: AuthError.Unknown(throwable.message)
-                    _state.update { it.copy(submitting = false, error = error.message()) }
+                    // The entry screen only sends people here when the number
+                    // has an account, so "no account uses this number" here
+                    // means the account has no password credential yet. The
+                    // shared wording would tell them to register, which is
+                    // the one thing that cannot work.
+                    val message = if (error == AuthError.PhoneNotRegistered) {
+                        "This number has no password yet. Use Forgot password to set one."
+                    } else {
+                        error.message()
+                    }
+                    _state.update { it.copy(submitting = false, error = message) }
                 },
             )
         }
