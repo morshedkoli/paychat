@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
@@ -30,18 +31,21 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.core.validation.PasswordError
 import com.paychat.paychat.core.validation.Validators
+import com.paychat.paychat.feature.auth.AuthBackdrop
 import com.paychat.paychat.feature.auth.AuthHero
 import com.paychat.paychat.feature.auth.FooterLink
+import com.paychat.paychat.feature.auth.LightCardScheme
+import com.paychat.paychat.feature.auth.StaggeredEntrance
 import com.paychat.paychat.feature.auth.message
 import com.paychat.paychat.ui.components.FormError
 import com.paychat.paychat.ui.components.PasswordField
-import com.paychat.paychat.ui.components.PhoneField
+
 import com.paychat.paychat.ui.components.PrimaryButton
 
 @Composable
 fun LoginScreen(
     onSignedIn: () -> Unit,
-    onRegisterInstead: () -> Unit,
+    onChangeNumber: () -> Unit,
     onResetRequested: (phoneE164: String) -> Unit,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
@@ -56,76 +60,95 @@ fun LoginScreen(
         ResetPasswordDialog(
             onDismiss = { showReset = false },
             onConfirm = { newPassword ->
-                val phone = viewModel.startPasswordReset(newPassword)
                 showReset = false
-                if (phone != null) onResetRequested(phone)
+                onResetRequested(viewModel.startPasswordReset(newPassword))
             },
         )
     }
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .imePadding()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp),
-        ) {
-            AuthHero(
-                headline = "Welcome back",
-                subtitle = "Sign in to keep chatting and settling up.",
-            )
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp,
+    Scaffold(containerColor = androidx.compose.ui.graphics.Color.Transparent) { inner ->
+        AuthBackdrop {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .imePadding()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    PhoneField(
-                        value = state.phone,
-                        onValueChange = viewModel::onPhoneChange,
-                        error = state.phoneError,
-                        enabled = !state.submitting,
+                StaggeredEntrance(delayMillis = 0) {
+                    AuthHero(
+                        headline = "Welcome back",
+                        subtitle = "Sign in to keep chatting and settling up.",
                     )
-                    PasswordField(
-                        value = state.password,
-                        onValueChange = viewModel::onPasswordChange,
-                        enabled = !state.submitting,
-                        imeAction = ImeAction.Done,
-                    )
+                }
 
-                    FormError(state.error)
+                StaggeredEntrance(delayMillis = 120) {
+                    LightCardScheme {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 2.dp,
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        state.phoneDisplay,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(
+                                        onClick = onChangeNumber,
+                                        enabled = !state.submitting,
+                                    ) { Text("Change") }
+                                }
+                                PasswordField(
+                                    value = state.password,
+                                    onValueChange = viewModel::onPasswordChange,
+                                    enabled = !state.submitting,
+                                    imeAction = ImeAction.Done,
+                                )
 
-                    TextButton(
-                        onClick = { showReset = true },
-                        modifier = Modifier.align(Alignment.End),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                    ) {
-                        Text("Forgot password?", style = MaterialTheme.typography.bodyMedium)
+                                FormError(state.error)
+
+                                TextButton(
+                                    onClick = { showReset = true },
+                                    modifier = Modifier.align(Alignment.End),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                                ) {
+                                    Text("Forgot password?", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
                     }
                 }
+
+                StaggeredEntrance(delayMillis = 200) {
+                    PrimaryButton(
+                        text = "Log in",
+                        onClick = viewModel::submit,
+                        loading = state.submitting,
+                    )
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                StaggeredEntrance(delayMillis = 280, modifier = Modifier.fillMaxWidth()) {
+                    FooterLink(
+                        lead = "Not your number?",
+                        action = "Use another",
+                        onClick = onChangeNumber,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
-
-            PrimaryButton(
-                text = "Log in",
-                onClick = viewModel::submit,
-                loading = state.submitting,
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            FooterLink(
-                lead = "New to PayChat?",
-                action = "Create an account",
-                onClick = onRegisterInstead,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }
