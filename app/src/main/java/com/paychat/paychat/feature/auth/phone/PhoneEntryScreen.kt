@@ -1,0 +1,128 @@
+package com.paychat.paychat.feature.auth.phone
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paychat.paychat.feature.auth.AuthBackdrop
+import com.paychat.paychat.feature.auth.AuthHero
+import com.paychat.paychat.feature.auth.LightCardScheme
+import com.paychat.paychat.feature.auth.StaggeredEntrance
+import com.paychat.paychat.ui.components.PhoneField
+import com.paychat.paychat.ui.components.PrimaryButton
+
+/**
+ * The one front door of the signed out flow.
+ *
+ * The number is the identity in PayChat, so it is the only thing asked for
+ * here; whether an account exists decides what comes next, rather than the
+ * user having to know which of two screens they belong on.
+ */
+@Composable
+fun PhoneEntryScreen(
+    onKnownNumber: (phoneE164: String) -> Unit,
+    onNewNumber: (phoneE164: String) -> Unit,
+    viewModel: PhoneEntryViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.knownNumber) {
+        state.knownNumber?.let {
+            onKnownNumber(it)
+            viewModel.onNavigated()
+        }
+    }
+
+    state.offerRegistration?.let { e164 ->
+        val display = state.offerRegistrationDisplay ?: e164
+        AlertDialog(
+            onDismissRequest = viewModel::onRegistrationDeclined,
+            title = { Text("Create an account?") },
+            text = {
+                Text(
+                    "No PayChat account uses $display yet. Create one for this number?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onNewNumber(e164)
+                    viewModel.onNavigated()
+                }) { Text("Create account") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::onRegistrationDeclined) { Text("Cancel") }
+            },
+        )
+    }
+
+    Scaffold(containerColor = Color.Transparent) { inner ->
+        AuthBackdrop {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .imePadding()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(28.dp),
+            ) {
+                StaggeredEntrance(delayMillis = 0) {
+                    AuthHero(
+                        headline = "Chat and settle up",
+                        subtitle = "Enter your phone number to get started.",
+                    )
+                }
+
+                StaggeredEntrance(delayMillis = 120) {
+                    LightCardScheme {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 2.dp,
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                PhoneField(
+                                    value = state.phone,
+                                    onValueChange = viewModel::onPhoneChange,
+                                    error = state.phoneError,
+                                    enabled = !state.checking,
+                                    imeAction = ImeAction.Done,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                StaggeredEntrance(delayMillis = 200) {
+                    PrimaryButton(
+                        text = "Continue",
+                        onClick = viewModel::submit,
+                        loading = state.checking,
+                    )
+                }
+
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}

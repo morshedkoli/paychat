@@ -23,6 +23,7 @@ import com.paychat.paychat.feature.auth.AuthGateViewModel
 import com.paychat.paychat.feature.auth.login.LoginScreen
 import com.paychat.paychat.feature.auth.otp.OtpPurpose
 import com.paychat.paychat.feature.auth.otp.OtpScreen
+import com.paychat.paychat.feature.auth.phone.PhoneEntryScreen
 import com.paychat.paychat.feature.auth.register.RegisterScreen
 import com.paychat.paychat.feature.contacts.AddContactScreen
 import com.paychat.paychat.feature.chat.ChatScreen
@@ -56,7 +57,7 @@ fun PayChatNavHost(
             AuthGate.SIGNED_IN -> navController.toTopLevel(Routes.HOME)
             AuthGate.SIGNED_OUT ->
                 if (navController.currentDestination?.route !in Routes.AUTH_ROUTES) {
-                    navController.toTopLevel(Routes.LOGIN)
+                    navController.toTopLevel(Routes.PHONE)
                 }
         }
     }
@@ -88,12 +89,22 @@ fun PayChatNavHost(
                 }
             }
 
-            composable(Routes.REGISTER) {
+            composable(Routes.PHONE) {
+                PhoneEntryScreen(
+                    onKnownNumber = { phone -> navController.navigate(Routes.login(phone)) },
+                    onNewNumber = { phone -> navController.navigate(Routes.register(phone)) },
+                )
+            }
+
+            composable(
+                Routes.REGISTER,
+                arguments = listOf(navArgument(NavArgs.PHONE) { type = NavType.StringType }),
+            ) {
                 RegisterScreen(
                     onOtpRequired = { phone ->
                         navController.navigate(Routes.otp(phone, OtpPurpose.REGISTER.name))
                     },
-                    onLoginInstead = { navController.toTopLevel(Routes.LOGIN) },
+                    onChangeNumber = { navController.popBackStack(Routes.PHONE, false) },
                 )
             }
 
@@ -110,10 +121,13 @@ fun PayChatNavHost(
                 )
             }
 
-            composable(Routes.LOGIN) {
+            composable(
+                Routes.LOGIN,
+                arguments = listOf(navArgument(NavArgs.PHONE) { type = NavType.StringType }),
+            ) {
                 LoginScreen(
                     onSignedIn = { authGateViewModel.onSignedIn() },
-                    onRegisterInstead = { navController.toTopLevel(Routes.REGISTER) },
+                    onChangeNumber = { navController.popBackStack(Routes.PHONE, false) },
                     onResetRequested = { phone ->
                         navController.navigate(
                             Routes.otp(phone, OtpPurpose.RESET_PASSWORD.name)
@@ -158,8 +172,10 @@ fun PayChatNavHost(
             ) {
                 ChatScreen(
                     onBack = { navController.popBackStack() },
-                    onAddTransaction = { threadId ->
-                        navController.navigate(Routes.addTransaction(threadId))
+                    onAddTransaction = { threadId, direction, amount, note, category ->
+                        navController.navigate(
+                            Routes.addTransaction(threadId, direction, amount, note, category)
+                        )
                     },
                     onOpenLedger = { threadId -> navController.navigate(Routes.ledger(threadId)) },
                     onOpenTransaction = { txnId ->
@@ -169,7 +185,29 @@ fun PayChatNavHost(
             }
             composable(
                 Routes.ADD_TRANSACTION,
-                arguments = listOf(navArgument(NavArgs.THREAD_ID) { type = NavType.StringType })
+                arguments = listOf(
+                    navArgument(NavArgs.THREAD_ID) { type = NavType.StringType },
+                    navArgument(NavArgs.DIRECTION) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(NavArgs.AMOUNT) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(NavArgs.NOTE) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                    navArgument(NavArgs.CATEGORY) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
             ) {
                 AddTransactionScreen(
                     onSaved = { navController.popBackStack() },
