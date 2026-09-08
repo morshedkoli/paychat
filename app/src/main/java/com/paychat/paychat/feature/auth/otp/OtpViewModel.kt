@@ -18,6 +18,7 @@ import com.paychat.paychat.feature.auth.message
 import com.paychat.paychat.ui.nav.NavArgs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +67,7 @@ class OtpViewModel @Inject constructor(
     private var verificationId: String? = null
     private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
     private var verificationJob: Job? = null
+    private var watchdogJob: Job? = null
 
     fun onCodeChange(value: String) = _state.update { it.copy(code = value, error = null) }
 
@@ -75,7 +77,26 @@ class OtpViewModel @Inject constructor(
      */
     fun sendCode(activity: Activity, resend: Boolean = false) {
         verificationJob?.cancel()
+        watchdogJob?.cancel()
         _state.update { it.copy(sending = true, error = null) }
+
+        // Firebase does not always answer. When app attestation cannot be
+        // completed the reCAPTCHA fallback can close without reporting
+        // anything, and then neither onCodeSent nor onVerificationFailed ever
+        // arrives - leaving this screen spinning with no error and no way to
+        // try again. Waiting is not a state anyone can act on, so it ends.
+        watchdogJob = viewModelScope.launch {
+            delay(SEND_TIMEOUT_MS)
+            if (_state.value.sending && !_state.value.codeSent) {
+                verificationJob?.cancel()
+                _state.update {
+                    it.copy(
+                        sending = false,
+                        error = "Could not send the code. Check your connection and try again.",
+                    )
+                }
+            }
+        }
 
         verificationJob = viewModelScope.launch {
             verifier.verify(
@@ -176,9 +197,17 @@ class OtpViewModel @Inject constructor(
     private fun startResendCountdown() {
         viewModelScope.launch {
             while (_state.value.secondsUntilResend > 0) {
-                kotlinx.coroutines.delay(1_000)
+                delay(1_000)
                 _state.update { it.copy(secondsUntilResend = it.secondsUntilResend - 1) }
             }
         }
+    }
+
+    private companion object {
+        /**
+         * Firebase's own SMS timeout plus room for the reCAPTCHA detour, after
+         * which silence is treated as failure.
+         */
+        const val SEND_TIMEOUT_MS = (PhoneVerifier.TIMEOUT_SECONDS + 15) * 1_000
     }
 }
