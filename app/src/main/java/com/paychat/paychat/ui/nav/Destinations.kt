@@ -6,9 +6,10 @@ package com.paychat.paychat.ui.nav
  */
 object Routes {
     const val SPLASH = "splash"
-    const val REGISTER = "register"
+    const val PHONE = "phone"
+    const val REGISTER = "register/{phone}"
     const val OTP = "otp/{phone}/{purpose}"
-    const val LOGIN = "login"
+    const val LOGIN = "login/{phone}"
 
     const val HOME = "home"
     const val CONTACTS = "contacts"
@@ -25,12 +26,17 @@ object Routes {
     /**
      * The leading plus of the E.164 number is dropped from the route, because
      * a raw "+" in a path segment is ambiguous once the route is parsed as a
-     * URI. The OTP screen puts it back.
+     * URI. The receiving screen puts it back. This holds for every route
+     * below that carries a number.
      *
      * @param purpose the name of an [com.paychat.paychat.feature.auth.otp.OtpPurpose]
      */
     fun otp(phoneE164: String, purpose: String) =
         "otp/${phoneE164.removePrefix("+")}/$purpose"
+
+    fun login(phoneE164: String) = "login/${phoneE164.removePrefix("+")}"
+
+    fun register(phoneE164: String) = "register/${phoneE164.removePrefix("+")}"
 
     fun chat(threadId: String) = "chat/$threadId"
 
@@ -55,7 +61,7 @@ object Routes {
     fun inheritedReview(threadId: String) = "inherited/$threadId"
 
     /** Destinations that make up the signed out flow. */
-    val AUTH_ROUTES = setOf(REGISTER, LOGIN, OTP)
+    val AUTH_ROUTES = setOf(PHONE, REGISTER, LOGIN, OTP)
 }
 
 object NavArgs {
