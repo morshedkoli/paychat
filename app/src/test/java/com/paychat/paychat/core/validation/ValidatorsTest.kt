@@ -51,4 +51,19 @@ class ValidatorsTest {
         assertFalse(Validators.isValidOtp("1234567"))
         assertFalse(Validators.isValidOtp("12345a"))
     }
+
+    @Test
+    fun `matching passwords are accepted`() {
+        assertTrue(Validators.passwordsMatch("correct horse", "correct horse"))
+    }
+
+    @Test
+    fun `a mismatched confirmation is rejected`() {
+        assertFalse(Validators.passwordsMatch("correct horse", "correct horst"))
+    }
+
+    @Test
+    fun `an empty confirmation is rejected`() {
+        assertFalse(Validators.passwordsMatch("correct horse", ""))
+    }
 }

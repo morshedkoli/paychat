@@ -33,6 +33,13 @@ object Validators {
         else -> null
     }
 
+    /**
+     * Whether the confirmation field matches. Kept next to the password rules
+     * so the registration screen has one place to ask about passwords.
+     */
+    fun passwordsMatch(password: String, confirmation: String): Boolean =
+        confirmation.isNotEmpty() && password == confirmation
+
     fun isValidOtp(code: String): Boolean =
         code.length == OTP_LENGTH && code.all { it.isDigit() }
 
