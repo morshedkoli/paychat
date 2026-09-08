@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -20,10 +23,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paychat.paychat.feature.auth.AuthBackdrop
+import com.paychat.paychat.feature.auth.AuthCard
+import com.paychat.paychat.feature.auth.AuthHero
+import com.paychat.paychat.feature.auth.FooterLink
+import com.paychat.paychat.feature.auth.StaggeredEntrance
 import com.paychat.paychat.ui.components.FormError
 import com.paychat.paychat.ui.components.OtpField
 import com.paychat.paychat.ui.components.PrimaryButton
@@ -47,58 +56,78 @@ fun OtpScreen(
         if (state.done) onVerified()
     }
 
-    Scaffold { inner ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner)
-                .imePadding()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("Verify your number", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "We sent a code to ${state.phoneDisplay}.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            OtpField(
-                value = state.code,
-                onValueChange = viewModel::onCodeChange,
-                enabled = !state.verifying,
-            )
-
-            FormError(state.error)
-
-            PrimaryButton(
-                text = if (state.purpose == OtpPurpose.REGISTER) "Create account" else "Set password",
-                onClick = viewModel::submitCode,
-                loading = state.sending || state.verifying,
-                enabled = state.codeSent,
-            )
-
-            TextButton(
-                onClick = { activity?.let { viewModel.sendCode(it, resend = true) } },
-                enabled = state.secondsUntilResend == 0 && !state.verifying,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
+    Scaffold(containerColor = Color.Transparent) { inner ->
+        AuthBackdrop {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(28.dp),
             ) {
-                Text(
-                    if (state.secondsUntilResend > 0) {
-                        "Resend code in ${state.secondsUntilResend}s"
-                    } else {
-                        "Resend code"
+                StaggeredEntrance(delayMillis = 0) {
+                    AuthHero(
+                        headline = "Verify your number",
+                        subtitle = "We sent a code to ${state.phoneDisplay}.",
+                    )
+                }
+
+                StaggeredEntrance(delayMillis = 120) {
+                    AuthCard {
+                        OtpField(
+                            value = state.code,
+                            onValueChange = viewModel::onCodeChange,
+                            enabled = !state.verifying,
+                        )
+
+                        FormError(state.error)
+
+                        // Inside the card, where the countdown reads as part
+                        // of the code entry rather than a stray link.
+                        TextButton(
+                            onClick = { activity?.let { viewModel.sendCode(it, resend = true) } },
+                            enabled = state.secondsUntilResend == 0 && !state.verifying,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Text(
+                                if (state.secondsUntilResend > 0) {
+                                    "Resend code in ${state.secondsUntilResend}s"
+                                } else {
+                                    "Resend code"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
-                )
-            }
+                }
 
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text("Change number")
+                StaggeredEntrance(delayMillis = 200) {
+                    PrimaryButton(
+                        text = if (state.purpose == OtpPurpose.REGISTER) {
+                            "Create account"
+                        } else {
+                            "Set password"
+                        },
+                        onClick = viewModel::submitCode,
+                        loading = state.sending || state.verifying,
+                        enabled = state.codeSent,
+                    )
+                }
+
+                // A plain gap, not weight: a weighted spacer would let the
+                // keyboard squeeze the button above it into a sliver.
+                Spacer(Modifier.height(24.dp))
+
+                StaggeredEntrance(delayMillis = 280, modifier = Modifier.fillMaxWidth()) {
+                    FooterLink(
+                        lead = "Wrong number?",
+                        action = "Change it",
+                        onClick = onBack,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
