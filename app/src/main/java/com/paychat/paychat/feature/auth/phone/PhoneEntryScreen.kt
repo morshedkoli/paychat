@@ -9,12 +9,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,7 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.feature.auth.AuthBackdrop
 import com.paychat.paychat.feature.auth.AuthHero
-import com.paychat.paychat.feature.auth.LightCardScheme
+import com.paychat.paychat.feature.auth.AuthCard
 import com.paychat.paychat.feature.auth.StaggeredEntrance
 import com.paychat.paychat.ui.components.PhoneNumberField
 import com.paychat.paychat.ui.components.PrimaryButton
@@ -97,25 +95,16 @@ fun PhoneEntryScreen(
                 }
 
                 StaggeredEntrance(delayMillis = 120) {
-                    LightCardScheme {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 2.dp,
-                        ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                PhoneNumberField(
-                                    region = state.region,
-                                    national = state.phone,
-                                    onRegionChange = viewModel::onRegionChange,
-                                    onNationalChange = viewModel::onPhoneChange,
-                                    error = state.phoneError,
-                                    enabled = !state.checking,
-                                    imeAction = ImeAction.Done,
-                                )
-                            }
-                        }
+                    AuthCard {
+                        PhoneNumberField(
+                            region = state.region,
+                            national = state.phone,
+                            onRegionChange = viewModel::onRegionChange,
+                            onNationalChange = viewModel::onPhoneChange,
+                            error = state.phoneError,
+                            enabled = !state.checking,
+                            imeAction = ImeAction.Done,
+                        )
                     }
                 }
 

@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,11 +28,10 @@ import com.paychat.paychat.core.validation.Validators
 import com.paychat.paychat.feature.auth.AuthBackdrop
 import com.paychat.paychat.feature.auth.AuthHero
 import com.paychat.paychat.feature.auth.FooterLink
-import com.paychat.paychat.feature.auth.LightCardScheme
+import com.paychat.paychat.feature.auth.AuthCard
 import com.paychat.paychat.feature.auth.StaggeredEntrance
 import com.paychat.paychat.ui.components.NameField
 import com.paychat.paychat.ui.components.PasswordField
-
 import com.paychat.paychat.ui.components.PrimaryButton
 
 @Composable
@@ -71,59 +68,47 @@ fun RegisterScreen(
                 }
 
                 StaggeredEntrance(delayMillis = 120) {
-                    LightCardScheme {
-                        Surface(
+                    AuthCard {
+                        NameField(
+                            value = state.name,
+                            onValueChange = viewModel::onNameChange,
+                            error = state.nameError,
+                            enabled = !state.submitting,
+                        )
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 2.dp,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                NameField(
-                                    value = state.name,
-                                    onValueChange = viewModel::onNameChange,
-                                    error = state.nameError,
-                                    enabled = !state.submitting,
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        state.phoneDisplay,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    TextButton(
-                                        onClick = onChangeNumber,
-                                        enabled = !state.submitting,
-                                    ) { Text("Change") }
-                                }
-                                PasswordField(
-                                    value = state.password,
-                                    onValueChange = viewModel::onPasswordChange,
-                                    error = state.passwordError,
-                                    enabled = !state.submitting,
-                                    imeAction = ImeAction.Next,
-                                )
-                                PasswordField(
-                                    value = state.confirmPassword,
-                                    onValueChange = viewModel::onConfirmPasswordChange,
-                                    label = "Confirm password",
-                                    error = state.confirmPasswordError,
-                                    enabled = !state.submitting,
-                                    imeAction = ImeAction.Done,
-                                )
-                                Text(
-                                    "At least ${Validators.MIN_PASSWORD_LENGTH} characters, not digits only.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            Text(
+                                state.phoneDisplay,
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = onChangeNumber,
+                                enabled = !state.submitting,
+                            ) { Text("Change") }
                         }
+                        PasswordField(
+                            value = state.password,
+                            onValueChange = viewModel::onPasswordChange,
+                            error = state.passwordError,
+                            enabled = !state.submitting,
+                            imeAction = ImeAction.Next,
+                        )
+                        PasswordField(
+                            value = state.confirmPassword,
+                            onValueChange = viewModel::onConfirmPasswordChange,
+                            label = "Confirm password",
+                            error = state.confirmPasswordError,
+                            enabled = !state.submitting,
+                            imeAction = ImeAction.Done,
+                        )
+                        Text(
+                            "At least ${Validators.MIN_PASSWORD_LENGTH} characters, not digits only.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
 

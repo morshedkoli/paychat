@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.paychat.paychat.core.phone.Countries
 import com.paychat.paychat.core.phone.Country
@@ -64,11 +65,13 @@ fun PhoneNumberField(
     var picking by remember { mutableStateOf(false) }
     val country = Countries.byRegion(region) ?: Countries.default
 
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        DialCodeChip(
+        // The country comes first because it decides what the digits below it
+        // mean. Named in full, so nobody has to recognise a flag or a code.
+        CountrySelector(
             country = country,
             enabled = enabled,
             isError = error != null,
@@ -78,7 +81,7 @@ fun PhoneNumberField(
         OutlinedTextField(
             value = national,
             onValueChange = { onNationalChange(it.filter(Char::isDigit)) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
             label = { Text(label) },
             placeholder = { Text("1712345678") },
             singleLine = true,
@@ -106,11 +109,11 @@ fun PhoneNumberField(
 }
 
 /**
- * The country code, drawn to match the field beside it rather than as a
- * button, so the pair reads as one control.
+ * The chosen country, drawn as a field rather than a button so it matches
+ * the number field under it.
  */
 @Composable
-private fun DialCodeChip(
+private fun CountrySelector(
     country: Country,
     enabled: Boolean,
     isError: Boolean,
@@ -120,33 +123,41 @@ private fun DialCodeChip(
         isError -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.outlineVariant
     }
+    val content = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    }
     Row(
         modifier = Modifier
+            .fillMaxWidth()
             .height(56.dp)
             .clip(FieldShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-            // The same outline as the field beside it: without one the code
-            // reads as text floating on the card rather than half of a control.
             .border(1.dp, border, FieldShape)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .padding(start = 16.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(country.flag, style = MaterialTheme.typography.titleMedium)
         Text(
+            country.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
             "+${country.dialCode}",
-            style = MaterialTheme.typography.titleMedium,
-            color = if (enabled) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-            },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Icon(
             Icons.Default.ArrowDropDown,
             contentDescription = "Change country",
-            tint = border,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
