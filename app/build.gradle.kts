@@ -91,6 +91,14 @@ android {
         buildConfig = true
     }
 
+    sourceSets {
+        // MigrationTestHelper reads the exported schemas off the test APK, so
+        // the KSP output directory has to ship as an androidTest asset.
+        getByName("androidTest") {
+            assets.srcDirs("$projectDir/schemas")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
