@@ -1,0 +1,118 @@
+package com.paychat.paychat.feature.transactions
+
+import app.cash.turbine.test
+import com.paychat.paychat.core.model.TxnDirection
+import com.paychat.paychat.core.model.TxnStatus
+import com.paychat.paychat.data.chat.ThreadsRepository
+import com.paychat.paychat.data.local.entity.ThreadBalanceEntity
+import com.paychat.paychat.data.local.entity.ThreadEntity
+import com.paychat.paychat.data.local.entity.TransactionEntity
+import com.paychat.paychat.data.transactions.TransactionQuery
+import com.paychat.paychat.data.transactions.TransactionRepository
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Before
+import org.junit.Test
+
+class TransactionsViewModelTest {
+
+    private val dispatcher = StandardTestDispatcher()
+    private val query: TransactionQuery = mockk()
+    private val transactions: TransactionRepository = mockk()
+    private val threads: ThreadsRepository = mockk()
+
+    private val me = "uid-me"
+
+    @Before fun setUp() = Dispatchers.setMain(dispatcher)
+    @After fun tearDown() = Dispatchers.resetMain()
+
+    private fun txn(id: String, direction: TxnDirection, amountMinor: Long = 1000) =
+        TransactionEntity(
+            txnId = id,
+            threadId = "thread-1",
+            createdBy = me,
+            direction = direction,
+            amountMinor = amountMinor,
+            status = TxnStatus.ACCEPTED,
+            createdAt = 1_700_000_000_000,
+        )
+
+    private fun viewModel(): TransactionsViewModel {
+        every { transactions.viewerUid() } returns me
+        every { query.observeRecent(any()) } returns flowOf(
+            listOf(
+                txn("gave", TxnDirection.SENT, 240000),
+                txn("got", TxnDirection.RECEIVED, 85000),
+            )
+        )
+        every { threads.observeThreads() } returns flowOf(
+            listOf(
+                ThreadEntity(
+                    threadId = "thread-1",
+                    peerUid = "uid-them",
+                    peerName = "Rakib",
+                    peerPhone = "+8801712345678",
+                    isLocal = false,
+                    lastMessageAt = 0,
+                )
+            )
+        )
+        every { transactions.observeBalances() } returns flowOf(
+            listOf(ThreadBalanceEntity(threadId = "thread-1", amountMinor = 155000, updatedAt = 0))
+        )
+        return TransactionsViewModel(query, transactions, threads)
+    }
+
+    @Test
+    fun `the feed starts with every row grouped by day`() = runTest {
+        viewModel().state.test {
+            val loaded = awaitItem().let { if (it.loading) awaitItem() else it }
+            assertEquals(1, loaded.days.size)
+            assertEquals(2, loaded.days.single().rows.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `the hero counts one person per non-zero balance`() = runTest {
+        viewModel().state.test {
+            val loaded = awaitItem().let { if (it.loading) awaitItem() else it }
+            assertEquals(1, loaded.people)
+            assertEquals(155000, loaded.summary.net.minor)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `switching the filter narrows the feed`() = runTest {
+        val model = viewModel()
+        model.state.test {
+            awaitItem().let { if (it.loading) awaitItem() else it }
+            model.setFilter(FeedFilter.YOU_GAVE)
+            val filtered = awaitItem()
+            assertEquals(FeedFilter.YOU_GAVE, filtered.filter)
+            assertEquals(listOf("gave"), filtered.days.flatMap { day -> day.rows.map { it.txnId } })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `loading more asks for a bigger page`() = runTest {
+        val model = viewModel()
+        model.state.test {
+            awaitItem().let { if (it.loading) awaitItem() else it }
+            model.loadMore()
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        io.mockk.verify { query.observeRecent(200) }
+    }
+}
