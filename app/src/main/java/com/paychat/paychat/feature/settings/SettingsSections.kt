@@ -2,20 +2,14 @@ package com.paychat.paychat.feature.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -27,17 +21,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.paychat.paychat.data.settings.ThemeChoice
 import com.paychat.paychat.feature.lock.canLock
-import com.paychat.paychat.ui.components.Avatar
 
 /**
- * The setting rows, lifted out of the screen that used to own them so that both
- * the profile tab and the old settings destination can show the same list.
+ * The setting rows the profile tab is built from.
  */
 
 /** App lock, with the reason it is unavailable when the phone has no screen lock. */
@@ -254,52 +245,4 @@ internal fun SignOutDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
             TextButton(onClick = onDismiss) { Text("Stay") }
         },
     )
-}
-
-/** The old settings-list identity row, kept for the settings destination. */
-@Composable
-internal fun ProfileHeader(
-    name: String,
-    phone: String,
-    photoUrl: String?,
-    uploading: Boolean,
-    onChangePhoto: () -> Unit,
-    onEditName: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Avatar(
-                name = name,
-                key = phone,
-                photoUrl = photoUrl,
-                size = 64.dp,
-                modifier = Modifier.clickable(enabled = !uploading, onClick = onChangePhoto),
-            )
-            if (uploading) CircularProgressIndicator(Modifier.size(28.dp))
-        }
-
-        Column(Modifier.weight(1f).padding(start = 16.dp)) {
-            Text(
-                name.ifBlank { "Your name" },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                phone,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Tap your picture to change it.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        IconButton(onClick = onEditName) {
-            Icon(Icons.Default.Edit, contentDescription = "Change your name")
-        }
-    }
 }

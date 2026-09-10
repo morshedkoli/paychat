@@ -11,7 +11,15 @@ object Routes {
     const val OTP = "otp/{phone}/{purpose}"
     const val LOGIN = "login/{phone}"
 
-    const val HOME = "home"
+    /** The signed in landing destination: a tab shell, not a screen. */
+    const val MAIN = "main"
+
+    // Tab roots. These live in the shell's own graph, never the outer one, so
+    // the bottom bar cannot appear over a full screen destination.
+    const val CHATS = "chats"
+    const val TRANSACTIONS = "transactions"
+    const val PROFILE = "profile"
+
     const val CONTACTS = "contacts"
     const val ADD_CONTACT = "contacts/add"
     const val CHAT = "chat/{threadId}"
@@ -21,7 +29,6 @@ object Routes {
     const val LEDGER = "chat/{threadId}/ledger"
     const val INHERITED_REVIEW = "inherited/{threadId}"
     const val SEARCH = "search"
-    const val SETTINGS = "settings"
 
     /**
      * The leading plus of the E.164 number is dropped from the route, because

@@ -28,11 +28,9 @@ import com.paychat.paychat.feature.auth.register.RegisterScreen
 import com.paychat.paychat.feature.contacts.AddContactScreen
 import com.paychat.paychat.feature.chat.ChatScreen
 import com.paychat.paychat.feature.contacts.ContactsScreen
-import com.paychat.paychat.feature.chats.ChatsScreen
 import com.paychat.paychat.feature.inherited.InheritedReviewScreen
 import com.paychat.paychat.feature.ledger.LedgerScreen
 import com.paychat.paychat.feature.search.SearchScreen
-import com.paychat.paychat.feature.settings.SettingsScreen
 import com.paychat.paychat.feature.transaction.AddTransactionScreen
 import com.paychat.paychat.feature.transaction.TransactionDetailScreen
 
@@ -54,7 +52,7 @@ fun PayChatNavHost(
     LaunchedEffect(gate) {
         when (gate) {
             AuthGate.CHECKING -> Unit
-            AuthGate.SIGNED_IN -> navController.toTopLevel(Routes.HOME)
+            AuthGate.SIGNED_IN -> navController.toTopLevel(Routes.MAIN)
             AuthGate.SIGNED_OUT ->
                 if (navController.currentDestination?.route !in Routes.AUTH_ROUTES) {
                     navController.toTopLevel(Routes.PHONE)
@@ -136,14 +134,10 @@ fun PayChatNavHost(
                 )
             }
 
-            composable(Routes.HOME) {
-                ChatsScreen(
-                    onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
-                    onNewChat = { navController.navigate(Routes.CONTACTS) },
-                    onSearch = { navController.navigate(Routes.SEARCH) },
-                    onReviewInherited = { threadId ->
-                        navController.navigate(Routes.inheritedReview(threadId))
-                    },
+            composable(Routes.MAIN) {
+                MainShell(
+                    onOpenOuter = { route -> navController.navigate(route) },
+                    onSignOut = authGateViewModel::signOut,
                 )
             }
             composable(Routes.CONTACTS) {
@@ -244,12 +238,6 @@ fun PayChatNavHost(
                     onOpenTransaction = { txnId ->
                         navController.navigate(Routes.transactionDetail(txnId))
                     },
-                )
-            }
-            composable(Routes.SETTINGS) {
-                SettingsScreen(
-                    onBack = { navController.popBackStack() },
-                    onSignOut = authGateViewModel::signOut,
                 )
             }
         }
