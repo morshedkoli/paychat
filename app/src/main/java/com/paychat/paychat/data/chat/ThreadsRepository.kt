@@ -14,6 +14,7 @@ import com.paychat.paychat.data.remote.LastMessageFields
 import com.paychat.paychat.data.remote.LocalContactFields
 import com.paychat.paychat.data.remote.ThreadFields
 import com.paychat.paychat.data.remote.UserFields
+import com.paychat.paychat.data.remote.getLongOrTimestamp
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -70,48 +71,67 @@ class ThreadsRepository @Inject constructor(
      *
      * The existing row's balance is kept: it is derived from transactions and
      * a thread document knows nothing about it.
+     *
+     * The snapshot carries every conversation, so the rows already stored are
+     * read once for the whole batch and each unknown peer is looked up once,
+     * rather than a database read and a possible network round trip per
+     * conversation on every snapshot the listener delivers.
      */
     suspend fun persist(threads: List<ThreadEntity>) {
         if (threads.isEmpty()) return
 
-        threadDao.upsertAll(
-            threads.map { thread ->
-                val existing = threadDao.byId(thread.threadId)
-                val profile = thread.peerUid?.let { profileFor(it) }
+        val stored = threadDao.all().associateBy { it.threadId }
+        val profiles = profilesFor(threads.mapNotNull { it.peerUid }.distinct())
 
-                thread.copy(
-                    peerName = profile?.name?.ifEmpty { null }
-                        ?: thread.peerName.ifEmpty { existing?.peerName.orEmpty() },
-                    peerPhone = profile?.phone?.ifEmpty { null }
-                        ?: thread.peerPhone.ifEmpty { existing?.peerPhone.orEmpty() },
-                    peerPhotoUrl = profile?.photoUrl ?: existing?.peerPhotoUrl,
-                )
-            }
-        )
+        // Only what actually moved. The listener re-delivers a conversation
+        // whenever any field on it changes — a typing claim renewed every few
+        // seconds, most of all — and writing a row back unchanged would still
+        // invalidate the query behind the conversation list and redraw it.
+        val changed = threads.mapNotNull { thread ->
+            val existing = stored[thread.threadId]
+            val profile = thread.peerUid?.let { profiles[it] }
+
+            val row = thread.copy(
+                peerName = profile?.name?.ifEmpty { null }
+                    ?: thread.peerName.ifEmpty { existing?.peerName.orEmpty() },
+                peerPhone = profile?.phone?.ifEmpty { null }
+                    ?: thread.peerPhone.ifEmpty { existing?.peerPhone.orEmpty() },
+                peerPhotoUrl = profile?.photoUrl ?: existing?.peerPhotoUrl,
+            )
+            row.takeIf { it != existing }
+        }
+        if (changed.isNotEmpty()) threadDao.upsertAll(changed)
     }
 
     /**
-     * The cached profile, fetched once and stored if this is a person the app
-     * has not seen before. Without it a conversation the other person started
-     * would show an empty name.
+     * The cached profiles, fetching and storing any person the app has not
+     * seen before. Without this a conversation the other person started would
+     * show an empty name.
      */
-    private suspend fun profileFor(uid: String): UserEntity? {
-        userDao.byUid(uid)?.let { return it }
+    private suspend fun profilesFor(uids: List<String>): Map<String, UserEntity> {
+        if (uids.isEmpty()) return emptyMap()
 
-        val document = runCatching {
-            firestore.collection(Collections.USERS).document(uid).get().await()
-        }.getOrNull() ?: return null
-        if (!document.exists()) return null
+        val cached = uids.mapNotNull { uid -> userDao.byUid(uid) }.associateBy { it.uid }
+        val missing = uids.filterNot { it in cached }
+        if (missing.isEmpty()) return cached
 
-        val user = UserEntity(
-            uid = uid,
-            phone = document.getString(UserFields.PHONE).orEmpty(),
-            name = document.getString(UserFields.NAME).orEmpty(),
-            photoUrl = document.getString(UserFields.PHOTO_URL),
-            updatedAt = document.getLong(UserFields.UPDATED_AT) ?: 0L,
-        )
-        userDao.upsert(user)
-        return user
+        val fetched = missing.mapNotNull { uid ->
+            val document = runCatching {
+                firestore.collection(Collections.USERS).document(uid).get().await()
+            }.getOrNull() ?: return@mapNotNull null
+            if (!document.exists()) return@mapNotNull null
+
+            UserEntity(
+                uid = uid,
+                phone = document.getString(UserFields.PHONE).orEmpty(),
+                name = document.getString(UserFields.NAME).orEmpty(),
+                photoUrl = document.getString(UserFields.PHOTO_URL),
+                updatedAt = document.getLongOrTimestamp(UserFields.UPDATED_AT) ?: 0L,
+            )
+        }
+        if (fetched.isNotEmpty()) userDao.upsertAll(fetched)
+
+        return cached + fetched.associateBy { it.uid }
     }
 }
 
@@ -123,6 +143,7 @@ private fun DocumentSnapshot.toThreadEntity(viewerUid: String): ThreadEntity? {
     val localContact = get(ThreadFields.LOCAL_CONTACT) as? Map<*, *>
     val lastMessage = get(ThreadFields.LAST_MESSAGE) as? Map<*, *>
     val blockedBy = (get(ThreadFields.BLOCKED_BY) as? List<*>)?.filterIsInstance<String>().orEmpty()
+    val departed = (get(ThreadFields.DEPARTED) as? List<*>)?.filterIsInstance<String>().orEmpty()
 
     return ThreadEntity(
         threadId = id,
@@ -132,6 +153,7 @@ private fun DocumentSnapshot.toThreadEntity(viewerUid: String): ThreadEntity? {
         isLocal = isLocal,
         blockedByMe = viewerUid in blockedBy,
         blockedByPeer = blockedBy.any { it != viewerUid },
+        peerDeparted = departed.any { it != viewerUid },
         lastMessageText = lastMessage?.get(LastMessageFields.TEXT) as? String,
         lastMessageAt = (lastMessage?.get(LastMessageFields.AT) as? Number)?.toLong() ?: 0L,
         updatedAt = (get(ThreadFields.UPDATED_AT) as? Number)?.toLong() ?: 0L,

@@ -4,6 +4,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.paychat.paychat.core.ledger.BalanceCalculator
+import com.paychat.paychat.core.ledger.CorrectionLink
 import com.paychat.paychat.core.ledger.TransactionRules
 import com.paychat.paychat.core.model.MessageType
 import com.paychat.paychat.core.model.SyncState
@@ -22,6 +23,7 @@ import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.ThreadBalanceFields
 import com.paychat.paychat.data.remote.TransactionFields
+import com.paychat.paychat.data.remote.getLongOrTimestamp
 import com.paychat.paychat.data.sync.OutboxScheduler
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -60,6 +62,7 @@ class TransactionRepository @Inject constructor(
      * Records a transaction and posts it into the conversation.
      *
      * @param photoLocalPath a receipt photo already copied into app storage
+     * @param reversesId the entry this one corrects, when it is a correction
      */
     suspend fun create(
         threadId: String,
@@ -68,6 +71,7 @@ class TransactionRepository @Inject constructor(
         note: String?,
         photoLocalPath: String?,
         dueDate: Long?,
+        reversesId: String? = null,
     ): Result<String> = runCatching {
         require(amount.minor > 0) { "an amount must be more than zero" }
         val createdBy = auth.currentUid ?: error("not signed in")
@@ -87,6 +91,7 @@ class TransactionRepository @Inject constructor(
             dueDate = dueDate,
             status = TransactionRules.initialStatus(direction, thread.isLocal),
             unconfirmed = TransactionRules.initialUnconfirmed(thread.isLocal),
+            reversesId = reversesId,
             createdAt = now,
             syncState = SyncState.PENDING,
         )
@@ -107,7 +112,7 @@ class TransactionRepository @Inject constructor(
         )
         threadDao.setLastMessage(threadId, "Transaction", now)
 
-        recomputeBalance(threadId)
+        refreshThread(threadId)
         outbox.schedule()
         txnId
     }
@@ -133,39 +138,34 @@ class TransactionRepository @Inject constructor(
      * Corrects an accepted transaction with an opposite entry.
      *
      * The original is never edited or deleted, so the history stays auditable
-     * and both people can see what was corrected and when.
+     * and both people can see what was corrected and when. The correction
+     * carries `reversesId`, and the pointer back from the original is derived
+     * from that by [refreshThread] rather than written here: a correction the
+     * counterparty refuses has to release the entry it was correcting.
      */
     suspend fun reverse(txnId: String, note: String?): Result<String> = runCatching {
         val original = transactionDao.byId(txnId) ?: error("that transaction is not on this device")
-        require(TransactionRules.canReverse(original.status, original.reversedBy != null)) {
+        require(
+            TransactionRules.canReverse(
+                original.status,
+                original.reversedBy != null,
+                original.unconfirmed,
+            )
+        ) {
             "only an accepted transaction that has not already been reversed can be corrected"
         }
 
-        val reversalId = create(
+        create(
             threadId = original.threadId,
             direction = TransactionRules.reversalDirection(original.direction),
             amount = Money(original.amountMinor),
             note = note ?: "Correction",
             photoLocalPath = null,
             dueDate = null,
+            reversesId = original.txnId,
         ).getOrThrow()
-
-        transactionDao.upsert(
-            original.copy(reversedBy = reversalId, syncState = SyncState.PENDING)
-        )
-        recomputeBalance(original.threadId)
-        outbox.schedule()
-        reversalId
     }
 
-    /**
-     * History someone recorded against this user's number before they joined.
-     *
-     * These entries already count for the person who wrote them, and count for
-     * nobody else until reviewed here. Accepting brings them into this user's
-     * balance; rejecting stops them counting for either side, which is the
-     * whole point of the review.
-     */
     /**
      * Entries this user recorded against someone who had not registered, still
      * waiting for that person to confirm them once they joined.
@@ -204,23 +204,42 @@ class TransactionRepository @Inject constructor(
                 syncState = SyncState.PENDING,
             )
         )
-        recomputeBalance(transaction.threadId)
+        refreshThread(transaction.threadId)
         outbox.schedule()
     }
 
     /**
      * Accepts every inherited entry in one conversation.
      *
-     * Each is written separately rather than in a batch so that one entry the
-     * server refuses does not silently discard the rest.
+     * Marked in one local write and one recompute rather than one of each per
+     * entry: a review screen holding a year of history would otherwise re-read
+     * and re-add the whole conversation once for every row it accepted. The
+     * upload still happens a row at a time, so one entry the server refuses
+     * does not discard the rest.
      */
     suspend fun acceptAllInherited(threadId: String): Result<Int> = runCatching {
         val viewerUid = auth.currentUid ?: error("not signed in")
-        val pending = transactionDao.forThread(threadId).filter {
-            TransactionRules.canReviewInherited(it.unconfirmed, it.createdBy, viewerUid)
-        }
-        pending.forEach { reviewInherited(it.txnId, accepted = true).getOrThrow() }
-        pending.size
+        val now = System.currentTimeMillis()
+
+        val reviewed = transactionDao.forThread(threadId)
+            .filter {
+                TransactionRules.canReviewInherited(it.unconfirmed, it.createdBy, viewerUid)
+            }
+            .map {
+                it.copy(
+                    status = TxnStatus.ACCEPTED,
+                    unconfirmed = false,
+                    resolvedAt = now,
+                    resolvedBy = viewerUid,
+                    syncState = SyncState.PENDING,
+                )
+            }
+        if (reviewed.isEmpty()) return@runCatching 0
+
+        transactionDao.upsertAll(reviewed)
+        refreshThread(threadId)
+        outbox.schedule()
+        reviewed.size
     }
 
     private suspend fun resolve(
@@ -244,20 +263,42 @@ class TransactionRepository @Inject constructor(
                 syncState = SyncState.PENDING,
             )
         )
-        recomputeBalance(transaction.threadId)
+        refreshThread(transaction.threadId)
         outbox.schedule()
     }
 
     /**
-     * Recomputes the conversation balance from its transactions.
+     * Brings a conversation back into agreement with its transaction rows:
+     * which entries stand corrected, and what the conversation comes to.
      *
-     * The stored figure is a cache for the lists; this is the only thing that
-     * ever writes it, and it is always derivable again from the rows.
+     * Both are derived rather than remembered, and both are recomputed from
+     * the same single read of the thread's rows, because every caller changes
+     * one row and then needs the whole conversation re-evaluated.
      */
-    suspend fun recomputeBalance(threadId: String) {
+    private suspend fun refreshThread(threadId: String) {
         val viewerUid = auth.currentUid ?: return
         val rows = transactionDao.forThread(threadId)
-        val balance = BalanceCalculator.balanceOf(rows, viewerUid)
+
+        val correctionOf = TransactionRules.correctionsHeld(
+            rows.map { CorrectionLink(it.txnId, it.reversesId, it.status) }
+        )
+
+        val changed = mutableListOf<TransactionEntity>()
+        val current = rows.map { row ->
+            val correction = correctionOf[row.txnId]
+            if (row.reversedBy == correction) {
+                row
+            } else {
+                row.copy(reversedBy = correction, syncState = SyncState.PENDING)
+                    .also { changed += it }
+            }
+        }
+        if (changed.isNotEmpty()) {
+            transactionDao.upsertAll(changed)
+            outbox.schedule()
+        }
+
+        val balance = BalanceCalculator.balanceOf(current, viewerUid)
         val now = System.currentTimeMillis()
 
         balanceDao.upsert(
@@ -305,8 +346,8 @@ class TransactionRepository @Inject constructor(
                     snapshot.documents.map { document ->
                         ThreadBalanceEntity(
                             threadId = document.id,
-                            amountMinor = document.getLong(ThreadBalanceFields.AMOUNT_MINOR) ?: 0L,
-                            updatedAt = document.getLong(ThreadBalanceFields.UPDATED_AT) ?: 0L,
+                            amountMinor = document.getLongOrTimestamp(ThreadBalanceFields.AMOUNT_MINOR) ?: 0L,
+                            updatedAt = document.getLongOrTimestamp(ThreadBalanceFields.UPDATED_AT) ?: 0L,
                         )
                     }
                 )
@@ -353,10 +394,13 @@ class TransactionRepository @Inject constructor(
         // so the local row wins until the outbox has caught up.
         val unsynced = transactionDao.forThread(threadId)
             .filter { it.syncState != SyncState.SYNCED }
-            .associateBy { it.txnId }
+            .mapTo(mutableSetOf()) { it.txnId }
 
-        transactionDao.upsertAll(transactions.filter { it.txnId !in unsynced })
-        recomputeBalance(threadId)
+        val incoming = transactions.filterNot { it.txnId in unsynced }
+        if (incoming.isEmpty()) return
+
+        transactionDao.upsertAll(incoming)
+        refreshThread(threadId)
     }
 }
 
@@ -388,17 +432,17 @@ private fun DocumentSnapshot.toEntity(threadId: String): TransactionEntity? {
         threadId = threadId,
         createdBy = getString(TransactionFields.CREATED_BY).orEmpty(),
         direction = direction,
-        amountMinor = getLong(TransactionFields.AMOUNT_MINOR) ?: 0L,
+        amountMinor = getLongOrTimestamp(TransactionFields.AMOUNT_MINOR) ?: 0L,
         note = getString(TransactionFields.NOTE),
         photoUrl = getString(TransactionFields.PHOTO_URL),
         photoPublicId = getString(TransactionFields.PHOTO_PUBLIC_ID),
-        dueDate = getLong(TransactionFields.DUE_DATE),
+        dueDate = getLongOrTimestamp(TransactionFields.DUE_DATE),
         status = status,
         unconfirmed = getBoolean(TransactionFields.UNCONFIRMED) ?: false,
         reversesId = getString(TransactionFields.REVERSES_ID),
         reversedBy = getString(TransactionFields.REVERSED_BY),
-        createdAt = getLong(TransactionFields.CREATED_AT) ?: 0L,
-        resolvedAt = getLong(TransactionFields.RESOLVED_AT),
+        createdAt = getLongOrTimestamp(TransactionFields.CREATED_AT) ?: 0L,
+        resolvedAt = getLongOrTimestamp(TransactionFields.RESOLVED_AT),
         resolvedBy = getString(TransactionFields.RESOLVED_BY),
         syncState = SyncState.SYNCED,
     )

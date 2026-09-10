@@ -39,6 +39,11 @@ class OutboxScheduler @Inject constructor(
         )
     }
 
+    /** Drops any pending outbox uploads, e.g. when signing out. */
+    fun cancel() {
+        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+    }
+
     private companion object {
         const val WORK_NAME = "paychat-outbox"
     }

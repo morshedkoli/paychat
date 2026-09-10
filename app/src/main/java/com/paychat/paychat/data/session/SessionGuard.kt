@@ -2,7 +2,7 @@ package com.paychat.paychat.data.session
 
 import com.google.firebase.firestore.FirebaseFirestore
 import com.paychat.paychat.data.remote.Collections
-import com.paychat.paychat.data.remote.UserFields
+import com.paychat.paychat.data.remote.SessionFields
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -12,8 +12,8 @@ import javax.inject.Singleton
 /**
  * Enforces the one-active-device rule.
  *
- * Signing in anywhere writes a fresh session id onto the user document. Every
- * other device is watching that field, sees a value that is not its own, and
+ * Signing in anywhere writes a fresh session id onto the user's session document.
+ * Every other device is watching that field, sees a value that is not its own, and
  * signs itself out.
  */
 @Singleton
@@ -34,10 +34,10 @@ class SessionGuard @Inject constructor(
             return@callbackFlow
         }
 
-        val registration = firestore.collection(Collections.USERS).document(uid)
+        val registration = firestore.collection(Collections.SESSIONS).document(uid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
-                val remote = snapshot.getString(UserFields.ACTIVE_SESSION_ID) ?: return@addSnapshotListener
+                val remote = snapshot.getString(SessionFields.ACTIVE_SESSION_ID) ?: return@addSnapshotListener
                 if (remote != local) trySend(true)
             }
 

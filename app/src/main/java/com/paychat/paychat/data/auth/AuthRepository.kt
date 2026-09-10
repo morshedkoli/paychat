@@ -13,6 +13,7 @@ import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.PhoneIndexFields
+import com.paychat.paychat.data.remote.SessionFields
 import com.paychat.paychat.data.remote.UserFields
 import com.paychat.paychat.data.session.SessionStore
 import kotlinx.coroutines.tasks.await
@@ -101,6 +102,13 @@ class AuthRepository @Inject constructor(
                 )
             )
             batch.set(
+                firestore.collection(Collections.SESSIONS).document(user.uid),
+                mapOf(
+                    SessionFields.ACTIVE_SESSION_ID to sessionId,
+                    SessionFields.UPDATED_AT to now,
+                )
+            )
+            batch.set(
                 firestore.collection(Collections.PHONE_INDEX).document(phoneE164),
                 mapOf(PhoneIndexFields.UID to user.uid)
             )
@@ -119,17 +127,17 @@ class AuthRepository @Inject constructor(
         val user = result.user ?: error("password sign-in returned no user")
 
         val sessionId = UUID.randomUUID().toString()
-        val doc = firestore.collection(Collections.USERS).document(user.uid)
+        val now = System.currentTimeMillis()
 
         // Claiming the session here is what signs the previous device out.
-        doc.set(
+        firestore.collection(Collections.SESSIONS).document(user.uid).set(
             mapOf(
-                UserFields.ACTIVE_SESSION_ID to sessionId,
-                UserFields.UPDATED_AT to System.currentTimeMillis(),
-            ),
-            SetOptions.merge()
+                SessionFields.ACTIVE_SESSION_ID to sessionId,
+                SessionFields.UPDATED_AT to now,
+            )
         ).await()
 
+        val doc = firestore.collection(Collections.USERS).document(user.uid)
         val name = doc.get().await().getString(UserFields.NAME).orEmpty()
         session.save(uid = user.uid, phone = phoneE164, sessionId = sessionId)
         AuthedUser(uid = user.uid, phone = phoneE164, name = name)
@@ -156,16 +164,40 @@ class AuthRepository @Inject constructor(
             return Result.failure(AuthException(AuthError.PhoneNotRegistered))
         }
 
-        user.updatePassword(newPassword).await()
+        val email = SyntheticEmail.forPhone(phoneE164)
+        val hasEmailProvider = user.providerData.any { it.providerId == EmailAuthProvider.PROVIDER_ID }
+        if (hasEmailProvider) {
+            user.updatePassword(newPassword).await()
+        } else {
+            user.linkWithCredential(EmailAuthProvider.getCredential(email, newPassword)).await()
+        }
 
         val sessionId = UUID.randomUUID().toString()
-        firestore.collection(Collections.USERS).document(user.uid).set(
+        val now = System.currentTimeMillis()
+        firestore.collection(Collections.SESSIONS).document(user.uid).set(
             mapOf(
-                UserFields.ACTIVE_SESSION_ID to sessionId,
-                UserFields.UPDATED_AT to System.currentTimeMillis(),
-            ),
-            SetOptions.merge()
+                SessionFields.ACTIVE_SESSION_ID to sessionId,
+                SessionFields.UPDATED_AT to now,
+            )
         ).await()
+
+        val userDoc = firestore.collection(Collections.USERS).document(user.uid).get().await()
+        if (!userDoc.exists()) {
+            firestore.collection(Collections.USERS).document(user.uid).set(
+                mapOf(
+                    UserFields.PHONE to phoneE164,
+                    UserFields.NAME to "User",
+                    UserFields.CREATED_AT to now,
+                    UserFields.UPDATED_AT to now,
+                )
+            ).await()
+            runCatching {
+                firestore.collection(Collections.PHONE_INDEX).document(phoneE164).set(
+                    mapOf(PhoneIndexFields.UID to user.uid)
+                ).await()
+            }
+        }
+
         session.save(uid = user.uid, phone = phoneE164, sessionId = sessionId)
     }
 

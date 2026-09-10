@@ -1,5 +1,17 @@
 package com.paychat.paychat.data.remote
 
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
+
+fun DocumentSnapshot.getLongOrTimestamp(field: String): Long? {
+    return when (val value = get(field)) {
+        is Number -> value.toLong()
+        is Timestamp -> value.toDate().time
+        is String -> value.toLongOrNull()
+        else -> null
+    }
+}
+
 /**
  * Every Firestore collection and field name used by the app. Nothing else in
  * the codebase spells these out, so a rename is a single edit here and in
@@ -7,6 +19,7 @@ package com.paychat.paychat.data.remote
  */
 object Collections {
     const val USERS = "users"
+    const val SESSIONS = "sessions"
     const val PHONE_INDEX = "phoneIndex"
     const val THREADS = "threads"
     const val MESSAGES = "messages"
@@ -30,6 +43,11 @@ object UserFields {
     const val ACTIVE_SESSION_ID = "activeSessionId"
 }
 
+object SessionFields {
+    const val ACTIVE_SESSION_ID = "activeSessionId"
+    const val UPDATED_AT = "updatedAt"
+}
+
 object PhoneIndexFields {
     const val UID = "uid"
 }
@@ -39,6 +57,15 @@ object ThreadFields {
 
     /** Uids who have blocked the other party in this thread. */
     const val BLOCKED_BY = "blockedBy"
+
+    /**
+     * Uid to the moment they last said they were typing, in epoch
+     * milliseconds. A member may only write their own key.
+     */
+    const val TYPING = "typing"
+
+    /** Uids whose account has been deleted. Written by the delete function. */
+    const val DEPARTED = "departed"
     const val IS_LOCAL = "isLocal"
     const val LOCAL_CONTACT = "localContact"
     const val LAST_MESSAGE = "lastMessage"

@@ -134,6 +134,7 @@ fun HomeScreen(
             if (state.inheritedCount > 0) {
                 InheritedBanner(
                     count = state.inheritedCount,
+                    threadCount = state.inheritedThreadIds.size,
                     onReview = {
                         state.inheritedThreadIds.firstOrNull()?.let(onReviewInherited)
                     },
@@ -266,7 +267,7 @@ private fun ThreadListItem(thread: ThreadRow, onClick: () -> Unit) {
  * It counts for nobody until reviewed, so the banner stays until it is.
  */
 @Composable
-private fun InheritedBanner(count: Int, onReview: () -> Unit) {
+private fun InheritedBanner(count: Int, threadCount: Int = 1, onReview: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.tertiaryContainer,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -280,6 +281,8 @@ private fun InheritedBanner(count: Int, onReview: () -> Unit) {
                 Text(
                     if (count == 1) {
                         "1 entry was recorded before you joined"
+                    } else if (threadCount > 1) {
+                        "$count entries across $threadCount chats were recorded before you joined"
                     } else {
                         "$count entries were recorded before you joined"
                     },

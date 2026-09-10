@@ -5,6 +5,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.paychat.paychat.core.errors.userMessage
+import com.paychat.paychat.core.model.TransactionNote
+import com.paychat.paychat.core.model.TxnCategory
 import com.paychat.paychat.core.model.TxnDirection
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.chat.ChatRepository
@@ -26,7 +28,9 @@ data class AddTransactionUiState(
     val isLocalThread: Boolean = false,
     val direction: TxnDirection = TxnDirection.SENT,
     val amountText: String = "",
+    val category: TxnCategory = TxnCategory.GENERAL,
     val note: String = "",
+    val trxId: String = "",
     val photoLocalPath: String? = null,
     val dueDate: Long? = null,
     val amountError: String? = null,
@@ -36,6 +40,9 @@ data class AddTransactionUiState(
 ) {
     val amount: Money? get() = Money.parse(amountText)
     val canSave: Boolean get() = amount?.isPositive == true && !saving
+
+    /** Transactions >= ৳10,000 (1,000,000 poisha) require biometric/screen lock confirmation */
+    val isHighValue: Boolean get() = (amount?.minor ?: 0L) >= 1_000_000L
 
     /**
      * What will happen when this is saved, said plainly, because the answer
@@ -66,6 +73,24 @@ class AddTransactionViewModel @Inject constructor(
     val state: StateFlow<AddTransactionUiState> = _state.asStateFlow()
 
     init {
+        val initialDir = savedStateHandle.get<String>("direction")
+            ?.let { runCatching { TxnDirection.valueOf(it) }.getOrNull() }
+        val initialAmount = savedStateHandle.get<String>("amount")
+        val initialNote = savedStateHandle.get<String>("note")
+        val initialCategory = savedStateHandle.get<String>("category")
+            ?.let { runCatching { TxnCategory.valueOf(it) }.getOrNull() }
+
+        if (initialDir != null || initialAmount != null || initialNote != null || initialCategory != null) {
+            _state.update {
+                it.copy(
+                    direction = initialDir ?: it.direction,
+                    amountText = initialAmount ?: it.amountText,
+                    note = initialNote ?: it.note,
+                    category = initialCategory ?: it.category,
+                )
+            }
+        }
+
         viewModelScope.launch {
             chat.observeThread(threadId).collect { thread ->
                 _state.update {
@@ -84,7 +109,12 @@ class AddTransactionViewModel @Inject constructor(
     fun onAmountChange(value: String) =
         _state.update { it.copy(amountText = value, amountError = null) }
 
+    fun onCategoryChange(category: TxnCategory) =
+        _state.update { it.copy(category = category) }
+
     fun onNoteChange(value: String) = _state.update { it.copy(note = value) }
+
+    fun onTrxIdChange(value: String) = _state.update { it.copy(trxId = value) }
 
     fun onDueDateChange(value: Long?) = _state.update { it.copy(dueDate = value) }
 
@@ -119,11 +149,16 @@ class AddTransactionViewModel @Inject constructor(
 
         viewModelScope.launch {
             _state.update { it.copy(saving = true, error = null) }
+            val formattedNote = TransactionNote.format(
+                category = current.category,
+                noteText = current.note,
+                trxId = current.trxId,
+            )
             transactions.create(
                 threadId = threadId,
                 direction = current.direction,
                 amount = amount,
-                note = current.note,
+                note = formattedNote,
                 photoLocalPath = current.photoLocalPath,
                 dueDate = current.dueDate,
             ).fold(

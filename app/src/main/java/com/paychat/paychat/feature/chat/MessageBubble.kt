@@ -28,6 +28,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +41,7 @@ import com.paychat.paychat.core.model.MessageType
 import com.paychat.paychat.core.model.SyncState
 import com.paychat.paychat.data.local.entity.MessageEntity
 import com.paychat.paychat.ui.components.Timestamps
+import com.paychat.paychat.ui.components.ZoomableImageViewer
 import com.paychat.paychat.ui.theme.PayChatTheme
 import java.io.File
 
@@ -105,16 +109,23 @@ fun MessageBubble(
 @Composable
 private fun ImageContent(message: MessageEntity) {
     val source = message.mediaUrl ?: message.localMediaPath?.let { File(it) }
+    var showViewer by remember { mutableStateOf(false) }
 
-    Box {
+    if (showViewer && source != null) {
+        ZoomableImageViewer(
+            model = source,
+            onDismiss = { showViewer = false },
+        )
+    }
+
+    Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { showViewer = true }) {
         AsyncImage(
             model = source,
             contentDescription = "Photo",
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .widthIn(max = 260.dp)
-                .height(220.dp)
-                .clip(RoundedCornerShape(12.dp)),
+                .height(220.dp),
         )
         if (message.syncState != SyncState.SYNCED) {
             LinearProgressIndicator(

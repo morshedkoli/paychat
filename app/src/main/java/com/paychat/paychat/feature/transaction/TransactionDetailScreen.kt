@@ -40,10 +40,18 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
+import com.paychat.paychat.core.model.TransactionNote
+import com.paychat.paychat.core.model.TxnCategory
 import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.ui.components.Timestamps
+import com.paychat.paychat.ui.components.ZoomableImageViewer
 import com.paychat.paychat.ui.theme.AmountLargeStyle
 import com.paychat.paychat.ui.theme.PayChatTheme
 import java.io.File
@@ -56,8 +64,11 @@ fun TransactionDetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboardManager = LocalClipboardManager.current
+    val coroutineScope = rememberCoroutineScope()
     val ledger = PayChatTheme.ledger
     var showReversal by remember { mutableStateOf(false) }
+    var showPhotoViewer by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -127,7 +138,44 @@ fun TransactionDetailScreen(
             DetailRow("Recorded", Timestamps.daySeparator(transaction.createdAt))
             transaction.resolvedAt?.let { DetailRow("Settled", Timestamps.daySeparator(it)) }
             transaction.dueDate?.let { DetailRow("Due", Timestamps.daySeparator(it)) }
-            transaction.note?.let { DetailRow("Note", it) }
+
+            val parsedNote = remember(transaction.note) { TransactionNote.parse(transaction.note) }
+            if (parsedNote.category != TxnCategory.GENERAL) {
+                DetailRow("Category", parsedNote.category.displayName)
+            }
+            if (parsedNote.text.isNotBlank()) {
+                DetailRow("Note", parsedNote.text)
+            }
+            if (parsedNote.trxId != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "TrxID",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            parsedNote.trxId,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        TextButton(onClick = {
+                            clipboardManager.setText(AnnotatedString(parsedNote.trxId))
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("TrxID copied to clipboard")
+                            }
+                        }) {
+                            Text("Copy")
+                        }
+                    }
+                }
+            }
 
             if (transaction.reversesId != null) {
                 DetailRow("Type", "Correction of an earlier transaction")
@@ -138,20 +186,29 @@ fun TransactionDetailScreen(
 
             val photo = transaction.photoUrl ?: transaction.localPhotoPath?.let { File(it) }
             if (photo != null) {
+                if (showPhotoViewer) {
+                    ZoomableImageViewer(
+                        model = photo,
+                        onDismiss = { showPhotoViewer = false },
+                        contentDescription = "Receipt photo",
+                    )
+                }
+
                 AsyncImage(
                     model = photo,
-                    contentDescription = "Receipt",
+                    contentDescription = "Receipt (tap to zoom)",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(280.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showPhotoViewer = true },
                 )
             }
 
             HorizontalDivider()
 
-            if (state.canAccept) {
+            if (state.showDecisionActions) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = viewModel::accept,

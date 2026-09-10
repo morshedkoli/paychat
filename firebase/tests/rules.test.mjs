@@ -425,6 +425,38 @@ describe("identity", () => {
     );
   });
 
+  it("a device can claim its own session without a profile existing", async () => {
+    // The session claim is what signs other devices out, and it has to work
+    // for an account whose profile document is absent - otherwise signing in
+    // and resetting a password both fail on a permission error.
+    await assertSucceeds(
+      setDoc(doc(as(MALLORY, "+8801700000009"), "sessions", MALLORY), {
+        activeSessionId: "session-1",
+        updatedAt: 1,
+      })
+    );
+  });
+
+  it("a device cannot claim somebody else's session", async () => {
+    await assertFails(
+      setDoc(doc(as(MALLORY, "+8801700000009"), "sessions", ALICE), {
+        activeSessionId: "session-1",
+        updatedAt: 1,
+      })
+    );
+  });
+
+  it("a session id is not readable by anyone else", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), "sessions", ALICE), {
+        activeSessionId: "session-1",
+        updatedAt: 1,
+      });
+    });
+
+    await assertFails(getDoc(doc(as(MALLORY, "+8801700000009"), "sessions", ALICE)));
+  });
+
   it("a signed out client cannot read the phone index", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), "phoneIndex", "+8801700000001"), { uid: ALICE });

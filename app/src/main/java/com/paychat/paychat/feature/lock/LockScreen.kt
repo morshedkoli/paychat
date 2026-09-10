@@ -49,7 +49,7 @@ fun canLock(context: Context): Boolean =
 fun LockScreen(activity: FragmentActivity, onUnlocked: () -> Unit) {
     // Asked for as soon as the cover appears, so the usual case is a single
     // glance at the phone rather than a button press.
-    LaunchedEffect(Unit) { prompt(activity, onUnlocked) }
+    LaunchedEffect(Unit) { promptBiometric(activity, onUnlocked = onUnlocked) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -76,14 +76,19 @@ fun LockScreen(activity: FragmentActivity, onUnlocked: () -> Unit) {
                 modifier = Modifier.padding(top = 8.dp),
             )
             Button(
-                onClick = { prompt(activity, onUnlocked) },
+                onClick = { promptBiometric(activity, onUnlocked = onUnlocked) },
                 modifier = Modifier.padding(top = 24.dp),
             ) { Text("Unlock") }
         }
     }
 }
 
-private fun prompt(activity: FragmentActivity, onUnlocked: () -> Unit) {
+fun promptBiometric(
+    activity: FragmentActivity,
+    title: String = "Unlock PayChat",
+    subtitle: String = "Your chats and balances are locked on this device.",
+    onUnlocked: () -> Unit,
+) {
     val prompt = BiometricPrompt(
         activity,
         ContextCompat.getMainExecutor(activity),
@@ -91,15 +96,13 @@ private fun prompt(activity: FragmentActivity, onUnlocked: () -> Unit) {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 onUnlocked()
             }
-            // A failure or a cancel leaves the cover in place. The button is
-            // there to try again; there is nothing else to offer.
         },
     )
 
     prompt.authenticate(
         BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock PayChat")
-            .setSubtitle("Your chats and balances are locked on this device.")
+            .setTitle(title)
+            .setSubtitle(subtitle)
             .setAllowedAuthenticators(ALLOWED)
             .build()
     )

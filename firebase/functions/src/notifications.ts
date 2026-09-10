@@ -133,7 +133,7 @@ async function counterparties(threadId: string, excludeUid: string): Promise<str
   return members.filter((uid) => uid !== excludeUid);
 }
 
-async function displayName(uid: string | undefined): Promise<string> {
+export async function displayName(uid: string | undefined): Promise<string> {
   if (!uid) return "Someone";
   const user = await getFirestore().collection("users").doc(uid).get();
   return (user.get("name") as string | undefined) || "Someone";

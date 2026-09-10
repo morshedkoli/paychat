@@ -45,8 +45,9 @@ class MoneyTest {
 
     @Test
     fun `arithmetic stays exact`() {
-        val total = listOf(Money(10), Money(20), Money(1)).sum()
+        val total = Money(10) + Money(20) + Money(1)
         assertEquals(Money(31), total)
         assertEquals(Money(-31), -total)
+        assertEquals(Money(9), Money(31) - Money(22))
     }
 }

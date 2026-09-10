@@ -13,9 +13,11 @@ are counted server side, and the app can export everything it holds or delete
 the account outright. The release build is minified and signable, and the
 README carries the checklist for the first upload.
 
-The typing indicator listed in the specification is the one thing not built.
-It needs a presence write on every keystroke, which is a real cost against
-the rate limits now in place, and it was not worth adding blind at the end.
+The typing indicator is now built as well. It does not write on every
+keystroke: the composer says only whether there is something half written, and
+the repository renews the claim at most once every three seconds, as a moment
+that expires by itself six seconds later rather than a flag that would stay
+lit whenever a device lost its connection mid-word.
 
 Implemented and unit tested:
 
@@ -26,7 +28,7 @@ Implemented and unit tested:
 - `core/validation/Validators.kt` — name, password, and OTP rules
 - `data/auth/` — registration, sign in, password reset
 - `data/contacts/` — address book sync, account discovery, local contacts
-- `data/chat/` — messages, threads, receipts
+- `data/chat/` — messages, threads, receipts, typing
 - `core/ledger/TransactionRules.kt` — who may accept, reject, cancel, correct
 - `core/ledger/LedgerStatement.kt` — running balance and closing balance
 - `data/media/` — photo and voice capture, signed Cloudinary upload
@@ -56,6 +58,14 @@ An accepted transaction is never edited or deleted. Correcting one adds an
 opposite entry pointing back at the original, which stays visible marked as
 corrected, so the history remains auditable and both people can see what
 changed.
+
+Only the correction records the link, as `reversesId`. The pointer the other
+way is derived from it, so a correction claims the entry from the moment it is
+recorded — the same entry cannot be corrected twice while the first attempt is
+outstanding — and releases it again if the counterparty rejects the correction
+or its author withdraws it. Writing that pointer down instead would leave an
+entry whose correction was refused permanently uncorrectable while still
+counting in full.
 
 The balance is never the authority. It is recomputed from the transaction rows
 after every change and cached only so the lists do not have to load every
@@ -130,6 +140,14 @@ that makes them readable: on a message the user sent they describe what the
 the user themselves read it, which is what the unread badge counts. Every
 message lists its own sender in both arrays, so the mapper ignores the sender's
 own entry — otherwise every message would show as read the moment it was sent.
+
+The typing indicator is a moment, not a flag: each member writes their own key
+in the thread's `typing` map, renewed at most once every three seconds while
+they keep typing and treated as expired six seconds later. A flag would need
+someone to clear it, and there is no moment on the other side that reliably
+comes — a device that loses its connection mid-word never sends one. The
+security rules let a member write only their own key, so nobody can put words
+in anybody else's mouth.
 
 ## Notifications and statements
 
@@ -289,10 +307,10 @@ files and exhaust the quota.
 ./gradlew testDebugUnitTest
 ```
 
-105 unit tests cover the money arithmetic, the balance, statement, handover
-and transaction rules, phone normalisation, thread ids, input validation,
-address book normalisation, receipt mapping, upload request assembly,
-timestamp formatting, search pattern escaping, and failure wording.
+105 unit tests cover the money arithmetic, the balance, statement, handover,
+transaction and correction rules, phone normalisation, thread ids, input
+validation, address book normalisation, receipt mapping, upload request
+assembly, timestamp formatting, search pattern escaping, and failure wording.
 
 The security rules are run against the real rules engine, which needs the
 Firestore emulator:
@@ -301,7 +319,7 @@ Firestore emulator:
 cd firebase/tests && npm install && npm test
 ```
 
-29 cases state an invariant as something that must be refused. Writing them
+43 cases state an invariant as something that must be refused. Writing them
 found a defect no amount of reading had: comparing an optional field that is
 absent throws, which denied every acceptance of a transaction that had never
 had a reversesId written.
@@ -316,16 +334,20 @@ against real SQLite:
 ## Layout
 
 ```
-app/src/main/java/com/paychat/koli/
+app/src/main/java/com/paychat/paychat/
   core/          pure logic, no Android or Firebase types
     money/       Money value class
-    ledger/      balance arithmetic
+    ledger/      balance arithmetic, transaction and correction rules
     model/       domain enums
     phone/       E.164 normalisation
   data/local/    Room database, entities, DAOs
   di/            Hilt modules
-  ui/            theme, navigation, screens
-firebase/        security rules and indexes
+  feature/       one package per screen: ViewModel and composables
+  ui/            theme, navigation, shared components
+firebase/
+  firestore.rules    security rules
+  functions/         Cloud Functions (asia-south1)
+  tests/             rules tested against the rules engine
 docs/            specification
 ```
 
@@ -341,12 +363,14 @@ firebase deploy --only functions
 
 The secrets live in Secret Manager, never in the repository and never in the
 app. Every function is deployed to `asia-south1`; change the region constant
-in each source file under `firebase/functions/src/` if your users are
-elsewhere.
+in each source file under `firebase/functions/src/` **and `FUNCTIONS_REGION` in
+`di/FirebaseModule.kt`** if your users are elsewhere. The client's default is
+`us-central1`, and a callable looked up in the wrong region fails as though it
+did not exist, so the two have to be changed together.
 
 The deployed functions are `signMediaUpload`, `attachHistoryOnRegistration`,
-the three notification triggers, and `remindDueTransactions`, which runs at
-18:00 Asia/Dhaka.
+`fileReport`, `deleteAccount`, the three notification triggers, and
+`remindDueTransactions`, which runs at 18:00 Asia/Dhaka.
 
 ## Releasing
 
@@ -382,3 +406,9 @@ leaves transactions in shared conversations: each is a record between two
 people, and the other party's ledger has to keep adding up. The listing and
 the privacy policy should say so, because a user who expects everything to
 vanish will report it as a bug.
+
+The other party is not left guessing. Deletion marks the departing uid on every
+thread they were in, the app reads that back, and the conversation shows
+"Account deleted" with the composer replaced by a line saying the balance is
+kept. Only the delete function can write that mark; the rules refuse it from a
+client, so nobody can fake the other person having left.

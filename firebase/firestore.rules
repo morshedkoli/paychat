@@ -62,6 +62,26 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ------------------------------------------------------------- sessions
+
+    // Which device currently holds the account, kept apart from the profile.
+    //
+    // It used to live on the user document, which coupled signing in to the
+    // profile's own validation rules: a session-only write carries no name, so
+    // for an account whose profile was missing the write was a create, failed
+    // validProfile(), and both sign in and password reset died on a permission
+    // error. The one-active-device rule has nothing to do with profile fields,
+    // so it gets its own document.
+    //
+    // Private to its owner: nobody else needs to know which device holds an
+    // account, and a session id is a value other devices compare against.
+    match /sessions/{userId} {
+      allow read: if signedIn() && userId == uid();
+      allow write: if signedIn() && userId == uid()
+                   && incoming().activeSessionId is string
+                   && incoming().keys().hasOnly(['activeSessionId', 'updatedAt']);
+    }
+
     // Claims a phone number for exactly one account. Create-only, so a number
     // can never be taken over by a later registration.
     //
@@ -98,14 +118,61 @@ service cloud.firestore {
             == existing().get('blockedBy', []).removeAll([uid()]);
       }
 
+      // The same idea for the typing map, which is keyed by uid: a member may
+      // announce that they are typing, and nobody else's entry may move with
+      // it.
+      function onlyOwnTypingChanged() {
+        return incoming().get('typing', {}).diff(existing().get('typing', {}))
+               .affectedKeys().hasOnly([uid()]);
+      }
+
+      // A thread is a known set of fields. Without this a member could use the
+      // document as free storage, and — worse — could write the fields the
+      // server owns, forging a handover or a departure the app would then
+      // render as if a trigger had produced it.
+      function validThreadShape() {
+        return incoming().keys().hasOnly([
+                 'members', 'isLocal', 'localContact', 'blockedBy', 'typing',
+                 'lastMessage', 'updatedAt', 'departed', 'promotedAt'
+               ]);
+      }
+
+      // Written by the handover trigger and by account deletion, both of
+      // which hold admin credentials and so are not subject to these rules.
+      function serverFieldsUnchanged() {
+        return incoming().get('departed', []) == existing().get('departed', [])
+            && incoming().get('promotedAt', 0) == existing().get('promotedAt', 0);
+      }
+
+      // A one-sided thread has exactly one member, the person who created it;
+      // a real conversation has exactly two, one of them the caller. Leaving
+      // this open let a caller mark a two-party thread `isLocal` and so take
+      // the local branch of validInitialStatus below, which is what allows a
+      // SENT claim to skip the counterparty's acceptance.
+      function validNewThread() {
+        return incoming().isLocal is bool
+            && incoming().members is list
+            && (incoming().isLocal
+                  ? incoming().members == [uid()]
+                  : (incoming().members.size() == 2
+                     && uid() in incoming().members
+                     && incoming().members[0] != incoming().members[1]))
+            && !incoming().keys().hasAny(['departed', 'promotedAt']);
+      }
+
       allow read: if isMember();
       allow create: if isMemberOfIncoming()
-                    && incoming().members.size() <= 2;
+                    && validThreadShape()
+                    && validNewThread();
       allow update: if isMember()
+                    && validThreadShape()
                     // Membership is set at creation and by the handover
                     // function only, never by an ordinary client update.
                     && incoming().members == existing().members
-                    && onlyOwnBlockChanged();
+                    && incoming().isLocal == existing().isLocal
+                    && serverFieldsUnchanged()
+                    && onlyOwnBlockChanged()
+                    && onlyOwnTypingChanged();
       allow delete: if false;
 
       // ----------------------------------------------------------- messages
@@ -196,12 +263,32 @@ service cloud.firestore {
         // A RECEIVED claim only lowers it, so it applies at once.
         // On a local (one-sided) thread there is nobody to accept, so both
         // start ACCEPTED and carry unconfirmed = true.
+        //
+        // `unconfirmed` means "inherited history nobody has reviewed", and it
+        // keeps an entry out of the other person's balance. On a real thread
+        // there is no history to inherit, so it must start false: otherwise an
+        // author could acknowledge a repayment and keep the credit from
+        // counting for the person who made it.
         function validInitialStatus() {
           return isLocalThread()
             ? (incoming().status == 'ACCEPTED' && incoming().unconfirmed == true)
-            : (incoming().direction == 'SENT'
-                 ? incoming().status == 'PENDING'
-                 : incoming().status == 'ACCEPTED');
+            : (incoming().unconfirmed == false
+               && (incoming().direction == 'SENT'
+                     ? incoming().status == 'PENDING'
+                     : incoming().status == 'ACCEPTED'));
+        }
+
+        // A transaction is a known set of fields, for the same reason a
+        // message is: an unknown one is either a bug or an attempt to use the
+        // ledger as storage.
+        function validShape() {
+          return incoming().keys().hasOnly([
+                   'createdBy', 'direction', 'amountMinor', 'note',
+                   'photoUrl', 'photoPublicId', 'dueDate', 'status',
+                   'unconfirmed', 'reversesId', 'reversedBy', 'createdAt',
+                   'resolvedAt', 'resolvedBy'
+                 ])
+              && incoming().createdAt is int;
         }
 
         // Optional fields are read with a default. Comparing a field that
@@ -217,15 +304,26 @@ service cloud.firestore {
 
         allow read: if inThread();
 
+        // Settling an entry moves its status and records who moved it, and
+        // touches nothing else. Without this the counterparty could rewrite
+        // the note, the receipt photo or the due date in the same write that
+        // accepted the amount.
+        function onlySettlementChanged() {
+          return incoming().diff(existing()).affectedKeys()
+                 .hasOnly(['status', 'resolvedAt', 'resolvedBy']);
+        }
+
         allow create: if inThread()
                       && notBlocked()
                       && incoming().createdBy == uid()
+                      && validShape()
                       && validAmount()
                       && validNote()
                       && validDirection()
                       && validInitialStatus();
 
         allow update: if inThread()
+                      && validShape()
                       && immutableFieldsUnchanged()
                       && (
                         // Writing exactly what is already stored changes
@@ -239,13 +337,15 @@ service cloud.firestore {
                         || (existing().status == 'PENDING'
                           && existing().createdBy != uid()
                           && incoming().status in ['ACCEPTED', 'REJECTED']
-                          && incoming().resolvedBy == uid())
+                          && incoming().resolvedBy == uid()
+                          && onlySettlementChanged())
 
                         // The author cancels their own pending item.
                         || (existing().status == 'PENDING'
                           && existing().createdBy == uid()
                           && incoming().status == 'CANCELLED'
-                          && incoming().resolvedBy == uid())
+                          && incoming().resolvedBy == uid()
+                          && onlySettlementChanged())
 
                         // The inheriting user reviews unconfirmed history.
                         // Only they may clear the flag, and only on a row they
@@ -253,13 +353,19 @@ service cloud.firestore {
                         || (existing().get('unconfirmed', false) == true
                           && existing().createdBy != uid()
                           && incoming().unconfirmed == false
-                          && incoming().status in ['ACCEPTED', 'REJECTED'])
+                          && incoming().status in ['ACCEPTED', 'REJECTED']
+                          && incoming().resolvedBy == uid()
+                          && incoming().diff(existing()).affectedKeys().hasOnly(
+                               ['status', 'unconfirmed', 'resolvedAt', 'resolvedBy']))
 
-                        // Marking an entry as reversed by a later entry.
+                        // The pointer to a correcting entry. Either member may
+                        // set it when they record a correction and clear it
+                        // again if that correction is refused, because it is
+                        // derived from the reversing row rather than being
+                        // money in its own right. Nothing else moves with it,
+                        // and the entry stays accepted throughout.
                         || (existing().status == 'ACCEPTED'
-                          && existing().get('reversedBy', null) == null
                           && incoming().status == 'ACCEPTED'
-                          && incoming().reversedBy is string
                           && incoming().diff(existing()).affectedKeys()
                              .hasOnly(['reversedBy']))
                       );

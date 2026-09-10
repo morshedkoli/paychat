@@ -16,12 +16,20 @@ import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.LastMessageFields
 import com.paychat.paychat.data.remote.MessageFields
 import com.paychat.paychat.data.remote.ThreadFields
+import com.paychat.paychat.data.remote.getLongOrTimestamp
 import com.paychat.paychat.data.sync.OutboxScheduler
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -106,6 +114,79 @@ class ChatRepository @Inject constructor(
         messageDao.insert(message)
         threadDao.setLastMessage(threadId, MessageMapper.preview(type, null), now)
         outbox.schedule()
+    }
+
+    // ------------------------------------------------------------- typing
+
+    /**
+     * Says whether the other person is typing right now.
+     *
+     * The claim is a timestamp rather than a flag, so it expires on its own.
+     * A flag would stay set for ever whenever the other device lost its
+     * connection mid-word, and there is no reliable moment to clear it from
+     * here. The flow re-emits when the claim runs out.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observePeerTyping(threadId: String): Flow<Boolean> {
+        val viewerUid = auth.currentUid ?: return flowOf(false)
+
+        return callbackFlow {
+            val registration = firestore.collection(Collections.THREADS)
+                .document(threadId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null) return@addSnapshotListener
+                    val claims = snapshot.get(ThreadFields.TYPING) as? Map<*, *>
+                    trySend(
+                        claims?.entries
+                            ?.filter { it.key != viewerUid }
+                            ?.mapNotNull { (it.value as? Number)?.toLong() }
+                            ?.maxOrNull()
+                            ?: 0L
+                    )
+                }
+            awaitClose { registration.remove() }
+        }
+            // A claim that has run out is worth nothing, so the flow has to
+            // report it expiring even though no snapshot arrives to say so.
+            .flatMapLatest { claimedAt ->
+                val remaining = TYPING_TTL_MS - (System.currentTimeMillis() - claimedAt)
+                if (remaining <= 0) flowOf(false)
+                else flow {
+                    emit(true)
+                    delay(remaining)
+                    emit(false)
+                }
+            }
+            .distinctUntilChanged()
+    }
+
+    /**
+     * Renews, or withdraws, this user's claim to be typing.
+     *
+     * Rate limited to one write while a claim is still fresh, because the
+     * caller is a text field and would otherwise write on every keystroke.
+     * Withdrawing is not rate limited: it is what stops the other side seeing
+     * "typing" after the message has been sent.
+     */
+    suspend fun setTyping(threadId: String, typing: Boolean) {
+        val viewerUid = auth.currentUid ?: return
+        val now = System.currentTimeMillis()
+
+        if (typing) {
+            if (now - (lastTypingWriteAt[threadId] ?: 0L) < TYPING_RENEW_MS) return
+            lastTypingWriteAt[threadId] = now
+        } else {
+            if (lastTypingWriteAt.remove(threadId) == null) return
+        }
+
+        // Failure is ignored on purpose. A typing indicator that could raise
+        // an error banner would be worse than one that quietly does not show.
+        runCatching {
+            firestore.collection(Collections.THREADS).document(threadId).set(
+                mapOf(ThreadFields.TYPING to mapOf(viewerUid to if (typing) now else 0L)),
+                SetOptions.merge(),
+            ).await()
+        }
     }
 
     /** Uploads one queued message. Called by the outbox worker. */
@@ -208,8 +289,17 @@ class ChatRepository @Inject constructor(
         }.await()
     }
 
+    /** When this user last claimed to be typing, per conversation. */
+    private val lastTypingWriteAt = ConcurrentHashMap<String, Long>()
+
     private companion object {
         const val MESSAGE_PAGE_SIZE = 200L
+
+        /** How long a typing claim counts for before it has to be renewed. */
+        const val TYPING_TTL_MS = 6_000L
+
+        /** How often a claim is renewed while the person keeps typing. */
+        const val TYPING_RENEW_MS = 3_000L
     }
 }
 
@@ -221,9 +311,9 @@ private fun DocumentSnapshot.toRemote(threadId: String) = MessageMapper.Remote(
     text = getString(MessageFields.TEXT),
     mediaUrl = getString(MessageFields.MEDIA_URL),
     mediaPublicId = getString(MessageFields.MEDIA_PUBLIC_ID),
-    durationMs = getLong(MessageFields.DURATION_MS),
+    durationMs = getLongOrTimestamp(MessageFields.DURATION_MS),
     txnId = getString(MessageFields.TXN_ID),
-    createdAt = getLong(MessageFields.CREATED_AT) ?: 0L,
+    createdAt = getLongOrTimestamp(MessageFields.CREATED_AT) ?: 0L,
     deliveredTo = (get(MessageFields.DELIVERED_TO) as? List<*>)?.filterIsInstance<String>().orEmpty(),
     readBy = (get(MessageFields.READ_BY) as? List<*>)?.filterIsInstance<String>().orEmpty(),
 )

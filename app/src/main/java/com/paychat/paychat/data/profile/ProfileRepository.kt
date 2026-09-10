@@ -10,6 +10,7 @@ import com.paychat.paychat.data.media.MediaFiles
 import com.paychat.paychat.data.media.MediaUploader
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.UserFields
+import com.paychat.paychat.data.remote.getLongOrTimestamp
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -95,7 +96,7 @@ class ProfileRepository @Inject constructor(
                 phone = document.getString(UserFields.PHONE).orEmpty(),
                 name = document.getString(UserFields.NAME).orEmpty(),
                 photoUrl = document.getString(UserFields.PHOTO_URL),
-                updatedAt = document.getLong(UserFields.UPDATED_AT) ?: 0L,
+                updatedAt = document.getLongOrTimestamp(UserFields.UPDATED_AT) ?: 0L,
             )
         )
     }

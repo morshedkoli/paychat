@@ -64,6 +64,14 @@ history, marked as reversed.
 A `PENDING` transaction may be freely cancelled by its author until the
 counterparty acts on it.
 
+The link between the two entries is written once, on the correction, as
+`reversesId`. The pointer back the other way, `reversedBy`, is derived from it
+rather than stored independently: a correction holds the entry it corrects from
+the moment it is recorded — so the same entry cannot be corrected twice while
+the first attempt is outstanding — and releases it again if the counterparty
+rejects the correction or its author withdraws it. An entry left holding a
+pointer to a refused correction could never be corrected again.
+
 ### 2.5 Balance
 Balance is always derived, never stored as the authority.
 
@@ -191,13 +199,20 @@ Only the returned secure URL and public ID are stored in Firestore.
 
 ## 5. Data model (Firestore)
 
+Every moment is an integer of epoch milliseconds rather than a Firestore
+timestamp. The client stores the same rows in Room, where a timestamp type does
+not exist, and one representation on both sides means the security rules can
+assert `is int` and no mapping layer has to decide what an absent date means.
+
 ```
 users/{uid}
   phone            string   E.164, unique (enforced via phoneIndex)
   name             string
   photoUrl         string?
-  createdAt        timestamp
-  fcmTokens        map<string, timestamp>
+  fcmToken         string?           the one active device (see section 10)
+  activeSessionId  string            a mismatch signs the other device out
+  createdAt        number
+  updatedAt        number
 
 phoneIndex/{e164}
   uid              string
@@ -208,8 +223,12 @@ threads/{threadId}
   members          array<string>     one uid for local threads, two otherwise
   isLocal          bool
   localContact     { name, phone }?  present when isLocal
+  blockedBy        array<string>?    a member may add or remove only their own uid
+  typing           map<string, number>?   uid to when they last claimed to be typing
   lastMessage      { text, type, at, senderId }
-  updatedAt        timestamp
+  updatedAt        number
+  departed         array<string>?    written by the account deletion function
+  promotedAt       number?           written by the handover trigger
 
 threads/{threadId}/messages/{messageId}
   senderId         string
@@ -219,7 +238,7 @@ threads/{threadId}/messages/{messageId}
   mediaPublicId    string?
   durationMs       number?           voice only
   txnId            string?           TXN only
-  createdAt        timestamp
+  createdAt        number
   deliveredTo      array<string>
   readBy           array<string>
 
@@ -230,18 +249,18 @@ threads/{threadId}/transactions/{txnId}
   note             string?
   photoUrl         string?
   photoPublicId    string?
-  dueDate          timestamp?
+  dueDate          number?
   status           "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED"
   unconfirmed      bool              inherited history awaiting review
-  reversesId       string?
-  reversedBy       string?
-  createdAt        timestamp
-  resolvedAt       timestamp?
+  reversesId       string?           the entry this one corrects
+  reversedBy       string?           derived from reversesId; see section 2.4
+  createdAt        number
+  resolvedAt       number?
   resolvedBy       string?
 
 users/{uid}/threadBalances/{threadId}
   amountMinor      number            signed, viewer perspective
-  updatedAt        timestamp
+  updatedAt        number
   # derived cache, recomputable from transactions
 
 users/{uid}/localContacts/{contactId}
@@ -249,6 +268,7 @@ users/{uid}/localContacts/{contactId}
   phone            string            E.164
   threadId         string
   linkedUid        string?           set when that phone registers
+  linkedAt         timestamp?        set with it, by the handover trigger
 ```
 
 ### Payer resolution
@@ -259,7 +279,6 @@ payee(txn) = the other member of the thread
 ```
 
 ---
-
 ## 6. Security rules — invariants to enforce
 
 1. A user may only read a thread where their uid is in `members`.
@@ -274,9 +293,21 @@ payee(txn) = the other member of the thread
 7. No transition out of `ACCEPTED`, `REJECTED`, or `CANCELLED` is permitted.
 8. `createdBy`, `direction`, `amountMinor`, and `createdAt` are immutable after
    creation.
-9. `unconfirmed` may only be cleared by the inheriting user.
+9. `unconfirmed` may only be cleared by the inheriting user, and may only be
+   set at creation on a local thread — on a two-party thread every entry starts
+   confirmed, or an author could record a repayment that never reached the
+   payer's balance.
 10. `phoneIndex/{e164}` is create-only, and only by the account claiming it.
 11. `threadBalances` is written only by the owning user or by a Cloud Function.
+12. A thread marked `isLocal` has exactly one member, its creator; a two-party
+    thread has exactly two, one of them the caller. Without this a caller could
+    mark a real conversation one-sided and so create `SENT` entries that skip
+    the counterparty's acceptance.
+13. Settling an entry changes only `status`, `resolvedAt` and `resolvedBy`, so
+    the note, receipt and due date cannot be rewritten in the act of accepting.
+14. Threads and transactions carry known fields only. `departed` and
+    `promotedAt` are written by Cloud Functions and no client write may change
+    them; in `blockedBy` and `typing` a member may only touch their own entry.
 
 ---
 
@@ -295,6 +326,12 @@ balance, followed by a closing balance summary.
 
 **Due dates.** Stored on the transaction. A daily scheduled Cloud Function scans
 for transactions due the next day and pushes a reminder to both parties.
+
+**Typing.** A member writes their own key in the thread's `typing` map, a
+moment rather than a flag, renewed at most once every three seconds while they
+keep typing and treated as expired six seconds after it was written. A flag
+would stay set for ever whenever a device lost its connection mid-word, and
+there is no reliable moment to clear it from the other side.
 
 **Voice notes.** Recorded as AAC in an MP4 container via `MediaRecorder`,
 uploaded to Cloudinary as a `video` resource type, played back with ExoPlayer

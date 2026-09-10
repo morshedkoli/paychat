@@ -73,6 +73,37 @@ class MigrationTest {
             }
     }
 
+    /**
+     * The one that rebuilds the table. Dropping two columns means copying every
+     * row into a new table, which is exactly the shape of migration that loses
+     * conversations when it is written wrong.
+     */
+    @Test
+    fun droppingDeadColumnsKeepsTheConversation() {
+        helper.createDatabase(TEST_DB, 4).use { db ->
+            db.execSQL(
+                "INSERT INTO threads (threadId, peerUid, peerPhone, peerName, peerPhotoUrl, " +
+                    "isLocal, awaitingConfirmation, lastMessageText, lastMessageAt, " +
+                    "unreadCount, updatedAt, blockedByMe, blockedByPeer) VALUES " +
+                    "('t1', 'u2', '+8801700000000', 'Rana', NULL, 0, 0, 'hi', 10, 3, 10, 1, 0)"
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 5, true, *PAYCHAT_MIGRATIONS)
+
+        migrated.query(
+            "SELECT peerName, blockedByMe, blockedByPeer, peerDeparted, lastMessageAt " +
+                "FROM threads WHERE threadId = 't1'"
+        ).use {
+            assertTrue("the conversation did not survive the rebuild", it.moveToFirst())
+            assertEquals("Rana", it.getString(0))
+            assertEquals(1, it.getInt(1))
+            assertEquals(0, it.getInt(2))
+            assertEquals(0, it.getInt(3))
+            assertEquals(10, it.getLong(4))
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test"
     }

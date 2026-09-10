@@ -54,8 +54,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import com.paychat.paychat.core.model.TxnCategory
 import com.paychat.paychat.core.model.TxnDirection
 import com.paychat.paychat.core.money.Money
+import com.paychat.paychat.feature.lock.canLock
+import com.paychat.paychat.feature.lock.promptBiometric
 import com.paychat.paychat.ui.components.PrimaryButton
 import com.paychat.paychat.ui.components.Timestamps
 import com.paychat.paychat.ui.theme.AmountLargeStyle
@@ -167,12 +175,39 @@ fun AddTransactionScreen(
                 },
             )
 
+            Text(
+                text = "Category",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(TxnCategory.entries) { cat ->
+                    FilterChip(
+                        selected = state.category == cat,
+                        onClick = { viewModel.onCategoryChange(cat) },
+                        label = { Text(cat.displayName) },
+                    )
+                }
+            }
+
             OutlinedTextField(
                 value = state.note,
                 onValueChange = viewModel::onNoteChange,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("What was it for? (optional)") },
                 maxLines = 3,
+            )
+
+            OutlinedTextField(
+                value = state.trxId,
+                onValueChange = viewModel::onTrxIdChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("bKash / Nagad TrxID (optional)") },
+                placeholder = { Text("e.g. 9J2K5L8M") },
+                singleLine = true,
             )
 
             Row(
@@ -220,9 +255,25 @@ fun AddTransactionScreen(
                 }
             }
 
+            val context = LocalContext.current
+            val activity = context as? FragmentActivity
+
+            val onRecordClick = {
+                if (state.isHighValue && activity != null && canLock(context)) {
+                    promptBiometric(
+                        activity = activity,
+                        title = "Authorize Transaction",
+                        subtitle = "Confirm recording transaction of ${state.amount?.format() ?: ""}",
+                        onUnlocked = viewModel::save,
+                    )
+                } else {
+                    viewModel.save()
+                }
+            }
+
             PrimaryButton(
                 text = "Record",
-                onClick = viewModel::save,
+                onClick = onRecordClick,
                 enabled = state.canSave,
                 loading = state.saving,
             )

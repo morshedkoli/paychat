@@ -40,8 +40,16 @@ data class TransactionDetailUiState(
 
     val canReverse: Boolean
         get() = transaction?.let {
-            TransactionRules.canReverse(it.status, it.reversedBy != null)
+            TransactionRules.canReverse(it.status, it.reversedBy != null, it.unconfirmed)
         } ?: false
+
+    val canReviewInherited: Boolean
+        get() = transaction?.let {
+            TransactionRules.canReviewInherited(it.unconfirmed, it.createdBy, viewerUid)
+        } ?: false
+
+    val showDecisionActions: Boolean
+        get() = canAccept || canReviewInherited
 }
 
 @HiltViewModel
@@ -66,8 +74,24 @@ class TransactionDetailViewModel @Inject constructor(
         }
     }
 
-    fun accept() = act { transactions.accept(txnId) }
-    fun reject() = act { transactions.reject(txnId) }
+    fun accept() = act {
+        val txn = _state.value.transaction
+        if (txn?.unconfirmed == true) {
+            transactions.reviewInherited(txnId, accepted = true)
+        } else {
+            transactions.accept(txnId)
+        }
+    }
+
+    fun reject() = act {
+        val txn = _state.value.transaction
+        if (txn?.unconfirmed == true) {
+            transactions.reviewInherited(txnId, accepted = false)
+        } else {
+            transactions.reject(txnId)
+        }
+    }
+
     fun cancel() = act { transactions.cancel(txnId) }
 
     /** Corrects an accepted transaction with an opposite entry. */

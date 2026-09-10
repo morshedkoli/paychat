@@ -38,6 +38,10 @@ data class ChatUiState(
     val isLocal: Boolean = false,
     val blockedByMe: Boolean = false,
     val blockedByPeer: Boolean = false,
+    /** The other person has deleted their account. */
+    val peerDeparted: Boolean = false,
+    /** The other person is composing something right now. */
+    val peerTyping: Boolean = false,
     val balance: Money = Money.ZERO,
     /** Newest first, which is the order the list renders in. */
     val messages: List<MessageEntity> = emptyList(),
@@ -53,7 +57,10 @@ data class ChatUiState(
     /** Blocking closes the conversation in both directions. */
     val blocked: Boolean get() = blockedByMe || blockedByPeer
 
-    val canSend: Boolean get() = draft.isNotBlank() && !blocked
+    /** Nothing new can be said, whether because of a block or a deleted account. */
+    val closed: Boolean get() = blocked || peerDeparted
+
+    val canSend: Boolean get() = draft.isNotBlank() && !closed
 }
 
 @HiltViewModel
@@ -92,10 +99,17 @@ class ChatViewModel @Inject constructor(
                         isLocal = thread?.isLocal ?: false,
                         blockedByMe = thread?.blockedByMe ?: false,
                         blockedByPeer = thread?.blockedByPeer ?: false,
+                        peerDeparted = thread?.peerDeparted ?: false,
                         balance = Money(balance?.amountMinor ?: 0L),
                         messages = messages,
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            chat.observePeerTyping(threadId).collect { typing ->
+                _state.update { it.copy(peerTyping = typing) }
             }
         }
 
@@ -134,7 +148,12 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { chat.markRead(threadId) }
     }
 
-    fun screenPaused() = visibleThread.closed(threadId)
+    fun screenPaused() {
+        visibleThread.closed(threadId)
+        // Leaving the screen with a half-typed draft must not leave the other
+        // side watching a claim that will never be renewed.
+        viewModelScope.launch { chat.setTyping(threadId, false) }
+    }
 
     // ----------------------------------------------------------- transactions
 
@@ -178,7 +197,12 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun onDraftChange(value: String) = _state.update { it.copy(draft = value) }
+    fun onDraftChange(value: String) {
+        _state.update { it.copy(draft = value) }
+        // The repository decides how often this actually reaches the server;
+        // from here it is simply "there is, or is not, something half written".
+        viewModelScope.launch { chat.setTyping(threadId, value.isNotBlank()) }
+    }
 
     fun send() {
         val body = _state.value.draft
@@ -189,6 +213,7 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(draft = "") }
 
         viewModelScope.launch {
+            chat.setTyping(threadId, false)
             chat.sendText(threadId, body).onFailure { error ->
                 _state.update {
                     it.copy(

@@ -4,6 +4,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import com.paychat.paychat.core.model.TransactionNote
+import com.paychat.paychat.core.model.TxnCategory
 import com.paychat.paychat.core.money.Money
 import java.io.File
 import java.text.SimpleDateFormat
@@ -165,7 +167,16 @@ private class PageWriter(private val pdf: PdfDocument) {
     /** Direction is spelled out, because a sign alone is easy to misread. */
     private fun detailOf(note: String?, viewerIsPayer: Boolean): String {
         val direction = if (viewerIsPayer) "You gave" else "You received"
-        return note?.takeIf { it.isNotBlank() }?.let { "$direction — $it" } ?: direction
+        val parsed = TransactionNote.parse(note)
+        val tag = if (parsed.category != TxnCategory.GENERAL) "[${parsed.category.displayName}] " else ""
+        val content = when {
+            parsed.text.isNotBlank() && parsed.trxId != null -> "${parsed.text} (${parsed.trxId})"
+            parsed.text.isNotBlank() -> parsed.text
+            parsed.trxId != null -> "TrxID: ${parsed.trxId}"
+            else -> ""
+        }
+        val detail = (tag + content).trim()
+        return if (detail.isNotEmpty()) "$direction — $detail" else direction
     }
 
     private fun clip(text: String, width: Float): String {

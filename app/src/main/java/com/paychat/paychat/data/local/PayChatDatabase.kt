@@ -28,7 +28,7 @@ import com.paychat.paychat.data.local.entity.UserEntity
         LocalContactEntity::class,
         DeviceContactEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

@@ -62,18 +62,23 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.FilledTonalButton
+import com.paychat.paychat.core.model.TxnCategory
+import com.paychat.paychat.core.model.TxnDirection
 import com.paychat.paychat.data.moderation.ReportReason
 import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.theme.AmountStyle
 import com.paychat.paychat.ui.theme.PayChatTheme
 import java.io.File
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
-    onAddTransaction: (String) -> Unit,
+    onAddTransaction: (threadId: String, direction: String?, amount: String?, note: String?, category: String?) -> Unit,
     onOpenLedger: (String) -> Unit,
     onOpenTransaction: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
@@ -160,7 +165,7 @@ fun ChatScreen(
             },
             onTransaction = {
                 showAttachments = false
-                onAddTransaction(state.threadId)
+                onAddTransaction(state.threadId, null, null, null, null)
             },
         )
     }
@@ -178,9 +183,18 @@ fun ChatScreen(
                         )
                         Column(Modifier.padding(start = 12.dp)) {
                             Text(state.peerName, style = MaterialTheme.typography.titleMedium)
-                            if (state.isLocal) {
+                            // At most one line under the name, in the order
+                            // that matters: a deleted account outranks a claim
+                            // to be typing, which outranks never having joined.
+                            val subtitle = when {
+                                state.peerDeparted -> "Account deleted"
+                                state.peerTyping -> "typing…"
+                                state.isLocal -> "Not on PayChat yet"
+                                else -> null
+                            }
+                            if (subtitle != null) {
                                 Text(
-                                    "Not on PayChat yet",
+                                    subtitle,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -198,6 +212,24 @@ fun ChatScreen(
                         Icon(Icons.Default.MoreVert, contentDescription = "More")
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        val settleAction: (() -> Unit)? = if (!state.balance.isZero) {
+                            {
+                                val dir = if (state.balance.isNegative) TxnDirection.SENT.name else TxnDirection.RECEIVED.name
+                                val amountStr = String.format(Locale.US, "%.2f", Math.abs(state.balance.minor) / 100.0)
+                                onAddTransaction(state.threadId, dir, amountStr, "Settlement", TxnCategory.SETTLEMENT.name)
+                            }
+                        } else null
+
+                        if (settleAction != null) {
+                            DropdownMenuItem(
+                                text = { Text("Settle balance") },
+                                onClick = {
+                                    showMenu = false
+                                    settleAction()
+                                },
+                            )
+                        }
+
                         DropdownMenuItem(
                             text = { Text(if (state.blockedByMe) "Unblock" else "Block") },
                             // Being blocked by the other person is not
@@ -224,11 +256,20 @@ fun ChatScreen(
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner).imePadding()) {
 
+            val settleAction: (() -> Unit)? = if (!state.balance.isZero) {
+                {
+                    val dir = if (state.balance.isNegative) TxnDirection.SENT.name else TxnDirection.RECEIVED.name
+                    val amountStr = String.format(Locale.US, "%.2f", Math.abs(state.balance.minor) / 100.0)
+                    onAddTransaction(state.threadId, dir, amountStr, "Settlement", TxnCategory.SETTLEMENT.name)
+                }
+            } else null
+
             BalanceHeader(
                 balanceText = state.balance.formatSigned(),
                 positive = state.balance.isPositive,
                 zero = state.balance.isZero,
                 onClick = { onOpenLedger(state.threadId) },
+                onSettle = settleAction,
             )
 
             LazyColumn(
@@ -275,7 +316,12 @@ fun ChatScreen(
 
             HorizontalDivider()
 
-            if (state.blocked) {
+            if (state.peerDeparted) {
+                ClosedNotice(
+                    state.peerName + " has deleted their account. " +
+                        "The conversation and its balance are kept."
+                )
+            } else if (state.blocked) {
                 BlockedNotice(
                     blockedByMe = state.blockedByMe,
                     peerName = state.peerName,
@@ -362,6 +408,17 @@ private fun BlockedNotice(blockedByMe: Boolean, peerName: String, onUnblock: () 
     }
 }
 
+/** Where the composer would be, when there is nobody left to send to. */
+@Composable
+private fun ClosedNotice(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),
+    )
+}
+
 @Composable
 private fun ReportDialog(
     peerName: String,
@@ -430,6 +487,7 @@ private fun BalanceHeader(
     positive: Boolean,
     zero: Boolean,
     onClick: () -> Unit,
+    onSettle: (() -> Unit)? = null,
 ) {
     val ledger = PayChatTheme.ledger
 
@@ -450,7 +508,10 @@ private fun BalanceHeader(
                 },
                 style = MaterialTheme.typography.labelLarge,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
                     text = balanceText,
                     style = AmountStyle,
@@ -460,7 +521,15 @@ private fun BalanceHeader(
                         else -> ledger.debit
                     },
                 )
-                IconButton(onClick = onClick) {
+                if (!zero && onSettle != null) {
+                    FilledTonalButton(
+                        onClick = onSettle,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    ) {
+                        Text("Settle", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                TextButton(onClick = onClick) {
                     Text("Ledger", style = MaterialTheme.typography.labelSmall)
                 }
             }

@@ -69,7 +69,44 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
-val PAYCHAT_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4)
+/**
+ * A departure flag, and the removal of two columns nothing ever wrote.
+ *
+ * `awaitingConfirmation` and `unreadCount` were both filled in by the list
+ * screen from the messages and transactions tables instead, so the columns
+ * held a default that no screen ever read. Carrying them forward would mean
+ * every future migration had to keep pretending they mattered.
+ *
+ * As in the 2 to 3 migration, the table is rebuilt because the SQLite that
+ * ships with Android 24 cannot drop a column.
+ */
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `threads_new` (" +
+                "`threadId` TEXT NOT NULL, `peerUid` TEXT, `peerPhone` TEXT NOT NULL, " +
+                "`peerName` TEXT NOT NULL, `peerPhotoUrl` TEXT, `isLocal` INTEGER NOT NULL, " +
+                "`blockedByMe` INTEGER NOT NULL, `blockedByPeer` INTEGER NOT NULL, " +
+                "`peerDeparted` INTEGER NOT NULL, `lastMessageText` TEXT, " +
+                "`lastMessageAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`threadId`))"
+        )
+        db.execSQL(
+            "INSERT INTO `threads_new` (`threadId`, `peerUid`, `peerPhone`, `peerName`, " +
+                "`peerPhotoUrl`, `isLocal`, `blockedByMe`, `blockedByPeer`, `peerDeparted`, " +
+                "`lastMessageText`, `lastMessageAt`, `updatedAt`) " +
+                "SELECT `threadId`, `peerUid`, `peerPhone`, `peerName`, `peerPhotoUrl`, " +
+                "`isLocal`, `blockedByMe`, `blockedByPeer`, 0, `lastMessageText`, " +
+                "`lastMessageAt`, `updatedAt` FROM `threads`"
+        )
+        db.execSQL("DROP TABLE `threads`")
+        db.execSQL("ALTER TABLE `threads_new` RENAME TO `threads`")
+
+        recreateThreadIndices(db)
+    }
+}
+
+val PAYCHAT_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
 /** Rebuilding a table drops its indices with it. */
 private fun recreateThreadIndices(db: SupportSQLiteDatabase) {

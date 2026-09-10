@@ -46,6 +46,10 @@ class VoicePlaybackState(private val player: ExoPlayer) {
     internal fun onEnded() {
         _playingId.value = null
     }
+
+    internal fun onError() {
+        _playingId.value = null
+    }
 }
 
 @Composable
@@ -58,6 +62,10 @@ fun rememberVoicePlayback(): VoicePlaybackState {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) state.onEnded()
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                state.onError()
             }
         }
         player.addListener(listener)

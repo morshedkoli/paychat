@@ -30,9 +30,6 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE uid = :uid")
     fun observe(uid: String): Flow<UserEntity?>
 
-    @Query("SELECT * FROM users WHERE phone = :phone LIMIT 1")
-    suspend fun byPhone(phone: String): UserEntity?
-
     @Query("SELECT * FROM users WHERE uid = :uid LIMIT 1")
     suspend fun byUid(uid: String): UserEntity?
 }
@@ -196,9 +193,6 @@ interface DeviceContactDao {
     @Query("SELECT * FROM device_contacts WHERE linkedUid IS NULL ORDER BY displayName ASC")
     fun observeUnregistered(): Flow<List<DeviceContactEntity>>
 
-    @Query("SELECT * FROM device_contacts WHERE phone = :phone LIMIT 1")
-    suspend fun byPhone(phone: String): DeviceContactEntity?
-
     /**
      * Removes numbers no longer in the address book. Room has no "delete where
      * not in a large list", so the sync passes the timestamp it just wrote and
@@ -217,7 +211,4 @@ interface LocalContactDao {
 
     @Query("SELECT * FROM local_contacts WHERE phone = :phone LIMIT 1")
     suspend fun byPhone(phone: String): LocalContactEntity?
-
-    @Query("UPDATE local_contacts SET linkedUid = :uid WHERE phone = :phone")
-    suspend fun link(phone: String, uid: String)
 }

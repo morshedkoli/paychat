@@ -51,8 +51,6 @@ value class Money(val minor: Long) : Comparable<Money> {
         private val plainFormat: DecimalFormat
             get() = DecimalFormat("#,##0.00", DecimalFormatSymbols(Locale.US))
 
-        fun ofTaka(taka: Long) = Money(Math.multiplyExact(taka, 100L))
-
         /**
          * Parses free user input such as "1200", "1,200.5", " 1200.05 ".
          * Returns null when the text is not a well formed non-negative amount.
@@ -75,5 +73,3 @@ value class Money(val minor: Long) : Comparable<Money> {
         }
     }
 }
-
-fun Iterable<Money>.sum(): Money = fold(Money.ZERO) { acc, m -> acc + m }

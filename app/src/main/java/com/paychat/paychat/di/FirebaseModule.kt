@@ -35,9 +35,19 @@ object FirebaseModule {
         }
     }
 
+    /**
+     * Pinned to the region the functions are actually deployed in.
+     *
+     * The default is us-central1, and a callable looked up in the wrong region
+     * fails as if it did not exist — which is exactly what happened to every
+     * upload signature, report, and account deletion until this was set.
+     */
     @Provides
     @Singleton
-    fun provideFunctions(): FirebaseFunctions = Firebase.functions
+    fun provideFunctions(): FirebaseFunctions = Firebase.functions(FUNCTIONS_REGION)
+
+    /** Matches the `region` on every handler in firebase/functions/src. */
+    private const val FUNCTIONS_REGION = "asia-south1"
 
     @Provides
     @Singleton

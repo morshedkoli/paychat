@@ -48,9 +48,17 @@ object TransactionRules {
      * An accepted transaction is never edited or deleted. Either party may
      * correct it with a reversing entry, which follows the normal acceptance
      * rules for its own direction.
+     *
+     * Inherited history is excluded even though it is accepted. It is waiting
+     * to be accepted or rejected, which is the decision that belongs to it;
+     * correcting it instead would mean one write carrying both a review and a
+     * correction, which the security rules refuse as a single change.
      */
-    fun canReverse(status: TxnStatus, alreadyReversed: Boolean): Boolean =
-        status == TxnStatus.ACCEPTED && !alreadyReversed
+    fun canReverse(
+        status: TxnStatus,
+        alreadyReversed: Boolean,
+        unconfirmed: Boolean = false,
+    ): Boolean = status == TxnStatus.ACCEPTED && !alreadyReversed && !unconfirmed
 
     /**
      * Inherited history: only the person who did not write it may confirm it,
@@ -61,4 +69,29 @@ object TransactionRules {
 
     /** The direction a reversal must carry to undo [original]. */
     fun reversalDirection(original: TxnDirection): TxnDirection = original.opposite()
+
+    /**
+     * Which correction, if any, is holding each corrected entry.
+     *
+     * The link is written on the correction, as `reversesId`, because that is
+     * the row the author creates. The pointer back the other way is derived
+     * from it here rather than remembered, so that a correction the
+     * counterparty refuses releases the entry it was correcting: an entry
+     * still carrying a stale pointer could never be corrected a second time.
+     *
+     * @return the corrected entry's id, to the id of the correction claiming it
+     */
+    fun correctionsHeld(entries: List<CorrectionLink>): Map<String, String> = entries
+        .filter { it.correctsId != null && it.status.holdsCorrection }
+        .associate { it.correctsId!! to it.id }
 }
+
+/**
+ * One entry reduced to what the correction rule needs from it. Narrow on
+ * purpose, so the rule can be exercised without a database row.
+ */
+data class CorrectionLink(
+    val id: String,
+    val correctsId: String?,
+    val status: TxnStatus,
+)

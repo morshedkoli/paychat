@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.paychat.paychat.core.ledger.BalanceCalculator
 import com.paychat.paychat.core.ledger.TransactionRules
+import com.paychat.paychat.core.model.TransactionNote
+import com.paychat.paychat.core.model.TxnCategory
 import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.local.entity.TransactionEntity
@@ -73,19 +76,55 @@ fun TransactionBubble(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = headline(transaction, viewerUid),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            val parsedNote = remember(transaction.note) { TransactionNote.parse(transaction.note) }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = headline(transaction, viewerUid),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (parsedNote.category != TxnCategory.GENERAL) {
+                    Text(
+                        text = parsedNote.category.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                RoundedCornerShape(6.dp),
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
             Text(
                 text = Money(transaction.amountMinor).format(),
                 style = AmountStyle,
                 color = accent,
             )
 
-            transaction.note?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium)
+            if (parsedNote.text.isNotBlank()) {
+                Text(parsedNote.text, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (parsedNote.trxId != null) {
+                Text(
+                    text = "TrxID: ${parsedNote.trxId}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .background(
+                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
+                            RoundedCornerShape(4.dp),
+                        )
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                )
             }
 
             transaction.dueDate?.let {

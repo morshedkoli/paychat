@@ -33,15 +33,18 @@ data class ThreadEntity(
     val peerName: String,
     val peerPhotoUrl: String? = null,
     val isLocal: Boolean,
-    /** Inherited history on this thread is waiting for the other side to review. */
-    val awaitingConfirmation: Boolean = false,
     /** This user has blocked the other one. */
     val blockedByMe: Boolean = false,
     /** The other user has blocked this one. */
     val blockedByPeer: Boolean = false,
+    /**
+     * The other person has deleted their account. The conversation and its
+     * balances stay, because they are half of this user's records too, but
+     * there is nobody left to send to.
+     */
+    val peerDeparted: Boolean = false,
     val lastMessageText: String? = null,
     val lastMessageAt: Long = 0L,
-    val unreadCount: Int = 0,
     val updatedAt: Long = 0L,
 )
 

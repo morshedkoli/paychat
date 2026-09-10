@@ -56,6 +56,11 @@ export const attachHistoryOnRegistration = onDocumentCreated(
         const members = (thread.get("members") as string[]) ?? [];
         const ownerUid = members[0];
         if (!ownerUid || ownerUid === newUid) continue;
+        // Already promoted, by an earlier run of this trigger that failed
+        // part way through. Promoting again would be harmless but writing it
+        // again is not free, and a thread that already holds both people is
+        // not a one-sided one whatever the flag says.
+        if (members.includes(newUid)) continue;
 
         batch.update(thread.ref, {
           members: [ownerUid, newUid].sort(),

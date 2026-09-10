@@ -24,6 +24,15 @@ enum class TxnStatus {
 
     val isTerminal: Boolean get() = this != PENDING
     val affectsBalance: Boolean get() = this == ACCEPTED
+
+    /**
+     * Whether a correction in this state still holds the entry it corrects.
+     *
+     * A correction is claimed the moment it is recorded, so the same entry
+     * cannot be corrected twice while the first attempt is outstanding. One
+     * that is refused or withdrawn releases the entry again.
+     */
+    val holdsCorrection: Boolean get() = this == PENDING || this == ACCEPTED
 }
 
 enum class MessageType {

@@ -1,7 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
-import { Channels, formatAmount, push } from "./notifications";
+import { Channels, displayName, formatAmount, push } from "./notifications";
 
 const REGION = "asia-south1";
 
@@ -36,31 +36,72 @@ export const remindDueTransactions = onSchedule(
 
     if (due.empty) return;
 
+    // Several transactions in one conversation fall due on the same day more
+    // often than not, and the scan is a nightly job over every account, so
+    // each thread is read once rather than once per entry.
+    const membersByThread = new Map<string, string[] | null>();
+    const membersOf = async (threadId: string): Promise<string[] | null> => {
+      const cached = membersByThread.get(threadId);
+      if (cached !== undefined) return cached;
+
+      const thread = await getFirestore().collection("threads").doc(threadId).get();
+      const members =
+        thread.exists && thread.get("isLocal") !== true
+          ? ((thread.get("members") as string[]) ?? [])
+          : null;
+      membersByThread.set(threadId, members);
+      return members;
+    };
+
     let sent = 0;
     for (const txn of due.docs) {
       const status = txn.get("status") as string | undefined;
       if (status !== "PENDING" && status !== "ACCEPTED") continue;
       if (txn.get("reversedBy")) continue;
+      // Inherited unconfirmed history has not been agreed to by the recipient yet.
+      if (txn.get("unconfirmed") === true) continue;
 
       const threadId = txn.ref.parent.parent?.id;
       if (!threadId) continue;
 
-      const thread = await getFirestore().collection("threads").doc(threadId).get();
-      if (!thread.exists || thread.get("isLocal") === true) continue;
+      const members = await membersOf(threadId);
+      if (!members || members.length < 2) continue;
 
-      const members = (thread.get("members") as string[]) ?? [];
-      if (members.length === 0) continue;
+      const createdBy = txn.get("createdBy") as string | undefined;
+      const direction = txn.get("direction") as string | undefined;
+      if (!createdBy || !direction) continue;
+
+      // In PayChat's direction model:
+      // SENT: createdBy claims they gave money (createdBy is lender, other member is borrower).
+      // RECEIVED: createdBy claims they got money (createdBy is borrower, other member is lender).
+      const lenderUid = direction === "SENT" ? createdBy : members.find((m) => m !== createdBy);
+      const borrowerUid = direction === "SENT" ? members.find((m) => m !== createdBy) : createdBy;
+      if (!lenderUid || !borrowerUid) continue;
 
       const amount = formatAmount(txn.get("amountMinor") as number | undefined);
       const note = (txn.get("note") as string | undefined)?.trim();
+      const noteSuffix = note ? ` (${note})` : "";
 
-      await push(members, {
+      const lenderName = await displayName(lenderUid);
+      const borrowerName = await displayName(borrowerUid);
+
+      // Notification for the borrower who owes the money
+      await push([borrowerUid], {
         threadId,
         title: "Due tomorrow",
-        body: note ? `${amount} — ${note}` : `${amount} falls due tomorrow.`,
+        body: `You owe ${lenderName} ${amount} tomorrow${noteSuffix}.`,
         channel: Channels.reminders,
       });
-      sent += 1;
+
+      // Notification for the lender who is expecting the repayment
+      await push([lenderUid], {
+        threadId,
+        title: "Due tomorrow",
+        body: `${borrowerName} owes you ${amount} tomorrow${noteSuffix}.`,
+        channel: Channels.reminders,
+      });
+
+      sent += 2;
     }
 
     logger.info("due date reminders sent", { scanned: due.size, sent });

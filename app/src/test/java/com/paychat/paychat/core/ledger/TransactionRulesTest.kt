@@ -75,6 +75,22 @@ class TransactionRulesTest {
         assertFalse(TransactionRules.canReverse(TxnStatus.REJECTED, alreadyReversed = false))
     }
 
+    /**
+     * Inherited history is accepted but still awaiting a decision. Correcting
+     * it instead would put a review and a correction in the same write, which
+     * the security rules refuse as one change.
+     */
+    @Test
+    fun `inherited history is reviewed rather than corrected`() {
+        assertFalse(
+            TransactionRules.canReverse(
+                TxnStatus.ACCEPTED,
+                alreadyReversed = false,
+                unconfirmed = true,
+            )
+        )
+    }
+
     @Test
     fun `a correction carries the opposite direction`() {
         assertEquals(
@@ -92,5 +108,60 @@ class TransactionRulesTest {
         assertTrue(TransactionRules.canReviewInherited(true, AUTHOR, OTHER))
         assertFalse(TransactionRules.canReviewInherited(true, AUTHOR, AUTHOR))
         assertFalse(TransactionRules.canReviewInherited(false, AUTHOR, OTHER))
+    }
+
+    @Test
+    fun `a correction claims the entry it corrects as soon as it is recorded`() {
+        val held = TransactionRules.correctionsHeld(
+            listOf(
+                CorrectionLink("original", null, TxnStatus.ACCEPTED),
+                CorrectionLink("correction", "original", TxnStatus.PENDING),
+            )
+        )
+
+        assertEquals(mapOf("original" to "correction"), held)
+    }
+
+    @Test
+    fun `an accepted correction keeps holding it`() {
+        val held = TransactionRules.correctionsHeld(
+            listOf(
+                CorrectionLink("original", null, TxnStatus.ACCEPTED),
+                CorrectionLink("correction", "original", TxnStatus.ACCEPTED),
+            )
+        )
+
+        assertEquals(mapOf("original" to "correction"), held)
+    }
+
+    /**
+     * The defect this rule exists for: an entry whose correction was refused
+     * used to keep pointing at it, which left it permanently uncorrectable
+     * while still counting in full.
+     */
+    @Test
+    fun `a refused or withdrawn correction releases it again`() {
+        listOf(TxnStatus.REJECTED, TxnStatus.CANCELLED).forEach { outcome ->
+            val held = TransactionRules.correctionsHeld(
+                listOf(
+                    CorrectionLink("original", null, TxnStatus.ACCEPTED),
+                    CorrectionLink("correction", "original", outcome),
+                )
+            )
+
+            assertEquals("a $outcome correction still held the entry", emptyMap<String, String>(), held)
+        }
+    }
+
+    @Test
+    fun `entries that correct nothing hold nothing`() {
+        val held = TransactionRules.correctionsHeld(
+            listOf(
+                CorrectionLink("a", null, TxnStatus.ACCEPTED),
+                CorrectionLink("b", null, TxnStatus.PENDING),
+            )
+        )
+
+        assertTrue(held.isEmpty())
     }
 }
