@@ -19,7 +19,7 @@ light and dark.
 | What is the Transactions tab? | A global feed of every transaction, newest first, filterable. Not a per-person balance list. |
 | Profile versus Settings | Profile absorbs Settings. The `SETTINGS` route is retired. |
 | What stays on Chats | Thread list, search, new-chat FAB, inherited banner. The balance summary and statement export leave. |
-| Bottom bar on deep screens | Hidden. Chat, transaction detail and ledger stay full screen. Each tab keeps its own back stack. Back from a tab root exits. |
+| Bottom bar on deep screens | Hidden. Chat, transaction detail and ledger stay full screen. Each tab keeps its own back stack. Back from Chats exits; back from another tab returns to Chats first. |
 | Visual direction | B, bold balance. |
 | Theme | Both light and dark, through existing tokens. The user's existing `ThemeChoice` setting keeps working. |
 
@@ -189,3 +189,14 @@ chat and transaction detail, and back from each tab root exits.
 - The in-memory filter and grouping run on every emission of a 100+ row list.
   If that shows up, the fix is to move grouping behind `derivedStateOf` or into
   the flow with `distinctUntilChanged`, not to add Paging.
+
+## Amendment, 2026-09-10
+
+The original decision said back from any tab root exits the app. The
+implementation keeps the inner back stack instead, so back from Transactions or
+Profile returns to Chats and only back from Chats exits. Two reasons to prefer
+what was built: it is the Material pattern users already expect from a bottom
+bar, and it is what keeps the Chats navigation entry — and therefore
+`ChatsViewModel`, the only driver of `syncThreads()` and `syncBalances()` —
+alive across tab switches. Popping tab roots inclusively would restart both
+sync loops on every switch.
