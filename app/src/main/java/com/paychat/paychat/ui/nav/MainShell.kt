@@ -1,6 +1,7 @@
 package com.paychat.paychat.ui.nav
 
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -55,7 +56,7 @@ fun MainShell(
         NavHost(
             navController = tabs,
             startDestination = Routes.CHATS,
-            modifier = Modifier.padding(inner),
+            modifier = Modifier.padding(inner).consumeWindowInsets(inner),
         ) {
             composable(Routes.CHATS) {
                 ChatsScreen(
