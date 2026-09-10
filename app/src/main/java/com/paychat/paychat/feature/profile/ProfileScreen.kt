@@ -1,45 +1,61 @@
-package com.paychat.paychat.feature.settings
+package com.paychat.paychat.feature.profile
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paychat.paychat.feature.settings.AccountSection
+import com.paychat.paychat.feature.settings.AppearanceSection
+import com.paychat.paychat.feature.settings.DangerSection
+import com.paychat.paychat.feature.settings.DataSection
+import com.paychat.paychat.feature.settings.DeleteAccountDialog
+import com.paychat.paychat.feature.settings.NameDialog
+import com.paychat.paychat.feature.settings.SettingsUiState
+import com.paychat.paychat.feature.settings.SettingsViewModel
+import com.paychat.paychat.feature.settings.SignOutDialog
+import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.components.shareFile
 import com.paychat.paychat.ui.components.shareStatement
 
 /**
- * The old settings destination, now only a frame around the section composables
- * the profile tab owns. It stays while `Routes.SETTINGS` exists; the route and
- * this file go together.
+ * The profile tab: who you are on top, then everything about the account and the
+ * app that you can change.
+ *
+ * This is a tab root, so there is no top bar and no back arrow — there is
+ * nothing behind it to go back to.
+ *
+ * The phone number is shown but not editable: it identifies the account, and
+ * changing it would strand every thread and balance recorded against it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
-    onBack: () -> Unit,
+fun ProfileScreen(
     onSignOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -81,30 +97,15 @@ fun SettingsScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { inner ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { inner ->
         Column(
             Modifier
                 .fillMaxSize()
                 .padding(inner)
                 .verticalScroll(rememberScrollState())
         ) {
-            ProfileHeader(
-                name = state.name,
-                phone = state.phone,
-                photoUrl = state.photoUrl,
-                uploading = state.uploadingPhoto,
+            ProfileIdentity(
+                state = state,
                 onChangePhoto = {
                     pickPhoto.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -159,6 +160,56 @@ fun SettingsScreen(
                 confirmSignOut = false
                 onSignOut()
             },
+        )
+    }
+}
+
+/**
+ * The centred identity block: picture, name, number. Tapping the picture opens
+ * the photo picker, exactly as the old settings header did.
+ */
+@Composable
+private fun ProfileIdentity(
+    state: SettingsUiState,
+    onChangePhoto: () -> Unit,
+    onEditName: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Avatar(
+                name = state.name,
+                key = state.phone,
+                photoUrl = state.photoUrl,
+                size = 96.dp,
+                modifier = Modifier.clickable(
+                    enabled = !state.uploadingPhoto,
+                    onClick = onChangePhoto,
+                ),
+            )
+            if (state.uploadingPhoto) CircularProgressIndicator(Modifier.size(28.dp))
+        }
+
+        Text(
+            state.name.ifBlank { "Your name" },
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+
+        Text(
+            state.phone,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        TextButton(onClick = onEditName) { Text("Edit") }
+
+        Text(
+            "Tap your picture to change it.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
