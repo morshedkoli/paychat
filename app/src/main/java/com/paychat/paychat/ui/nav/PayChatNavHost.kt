@@ -28,7 +28,7 @@ import com.paychat.paychat.feature.auth.register.RegisterScreen
 import com.paychat.paychat.feature.contacts.AddContactScreen
 import com.paychat.paychat.feature.chat.ChatScreen
 import com.paychat.paychat.feature.contacts.ContactsScreen
-import com.paychat.paychat.feature.home.HomeScreen
+import com.paychat.paychat.feature.chats.ChatsScreen
 import com.paychat.paychat.feature.inherited.InheritedReviewScreen
 import com.paychat.paychat.feature.ledger.LedgerScreen
 import com.paychat.paychat.feature.search.SearchScreen
@@ -137,10 +137,9 @@ fun PayChatNavHost(
             }
 
             composable(Routes.HOME) {
-                HomeScreen(
+                ChatsScreen(
                     onOpenThread = { threadId -> navController.navigate(Routes.chat(threadId)) },
                     onNewChat = { navController.navigate(Routes.CONTACTS) },
-                    onSettings = { navController.navigate(Routes.SETTINGS) },
                     onSearch = { navController.navigate(Routes.SEARCH) },
                     onReviewInherited = { threadId ->
                         navController.navigate(Routes.inheritedReview(threadId))

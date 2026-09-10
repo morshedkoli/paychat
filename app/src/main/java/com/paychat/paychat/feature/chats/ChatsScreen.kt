@@ -1,4 +1,4 @@
-package com.paychat.paychat.feature.home
+package com.paychat.paychat.feature.chats
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,14 +11,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Badge
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -35,47 +29,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.components.Timestamps
-import com.paychat.paychat.ui.components.shareStatement
-import com.paychat.paychat.ui.theme.AmountLargeStyle
-import com.paychat.paychat.ui.theme.AmountStyle
 import com.paychat.paychat.ui.theme.PayChatTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
+fun ChatsScreen(
     onOpenThread: (String) -> Unit,
     onNewChat: () -> Unit,
-    onSettings: () -> Unit,
     onSearch: () -> Unit,
     onReviewInherited: (String) -> Unit,
-    viewModel: HomeViewModel = hiltViewModel(),
+    viewModel: ChatsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    var showMenu by remember { mutableStateOf(false) }
-
-    LaunchedEffect(state.statement) {
-        state.statement?.let { uri ->
-            shareStatement(context, uri, "PayChat statement")
-            viewModel.statementShared()
-        }
-    }
 
     LaunchedEffect(state.error) {
         state.error?.let {
@@ -92,27 +69,6 @@ fun HomeScreen(
                     IconButton(onClick = onSearch) {
                         Icon(Icons.Default.Search, contentDescription = "Search")
                     }
-                    IconButton(onClick = onSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (state.exporting) "Preparing statement…"
-                                    else "Export all statements"
-                                )
-                            },
-                            enabled = !state.exporting,
-                            onClick = {
-                                showMenu = false
-                                viewModel.exportEverything()
-                            },
-                        )
-                    }
                 },
             )
         },
@@ -124,12 +80,6 @@ fun HomeScreen(
         },
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
-
-            BalanceSummaryCard(
-                net = state.summary.net,
-                willGet = state.summary.willGet,
-                willGive = state.summary.willGive,
-            )
 
             if (state.inheritedCount > 0) {
                 InheritedBanner(
@@ -160,58 +110,6 @@ fun HomeScreen(
                 }
             }
         }
-    }
-}
-
-/**
- * Net alone would hide symmetric debt, so what the user is owed and what they
- * owe are always shown beside it.
- */
-@Composable
-private fun BalanceSummaryCard(net: Money, willGet: Money, willGive: Money) {
-    val ledger = PayChatTheme.ledger
-
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-        ),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                "Overall balance",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Text(
-                text = net.formatSigned(),
-                style = AmountLargeStyle,
-                color = when {
-                    net.isPositive -> ledger.credit
-                    net.isNegative -> ledger.debit
-                    else -> MaterialTheme.colorScheme.onPrimaryContainer
-                },
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                SummaryFigure("You will get", willGet, ledger.credit)
-                SummaryFigure("You will give", willGive, ledger.debit)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SummaryFigure(label: String, amount: Money, color: androidx.compose.ui.graphics.Color) {
-    Column {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-        Text(amount.format(), style = AmountStyle, color = color)
     }
 }
 
