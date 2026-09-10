@@ -144,6 +144,14 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE threadId = :threadId ORDER BY createdAt ASC")
     suspend fun forThread(threadId: String): List<TransactionEntity>
 
+    /**
+     * Every transaction, newest first, capped. The cap is raised as the feed is
+     * scrolled; there is no cursor, because the whole page is re-read from Room
+     * on any change anyway.
+     */
+    @Query("SELECT * FROM transactions ORDER BY createdAt DESC LIMIT :limit")
+    fun observeRecent(limit: Int): Flow<List<TransactionEntity>>
+
     @Query("SELECT * FROM transactions WHERE txnId = :txnId")
     fun observe(txnId: String): Flow<TransactionEntity?>
 

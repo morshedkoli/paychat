@@ -322,6 +322,9 @@ class TransactionRepository @Inject constructor(
 
     fun observeBalances(): Flow<List<ThreadBalanceEntity>> = balanceDao.observeAll()
 
+    /** The signed-in user, or null when the session has already gone. */
+    fun viewerUid(): String? = auth.currentUid
+
     fun observeBalance(threadId: String): Flow<ThreadBalanceEntity?> = balanceDao.observe(threadId)
 
     /**
