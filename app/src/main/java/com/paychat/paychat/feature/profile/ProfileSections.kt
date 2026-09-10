@@ -1,4 +1,4 @@
-package com.paychat.paychat.feature.settings
+package com.paychat.paychat.feature.profile
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -22,130 +24,160 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.paychat.paychat.data.settings.ThemeChoice
 import com.paychat.paychat.feature.lock.canLock
 
 /**
- * The setting rows the profile tab is built from.
+ * The setting rows the profile tab is built from, each group on its own card.
  */
+
+/**
+ * One group of settings. The card carries the group's name, so the rows inside
+ * need no heading of their own, and the rows sit on the card rather than on the
+ * page — hence the transparent [ListItem] containers.
+ */
+@Composable
+private fun ProfileCard(title: String, content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 2.dp),
+        )
+        content()
+    }
+}
+
+/** Rows inside a card must not paint their own background over it. */
+@Composable
+private fun cardRowColours() = ListItemDefaults.colors(containerColor = Color.Transparent)
 
 /** App lock, with the reason it is unavailable when the phone has no screen lock. */
 @Composable
-internal fun AccountSection(state: SettingsUiState, onToggleAppLock: (Boolean) -> Unit) {
+internal fun AccountSection(state: ProfileUiState, onToggleAppLock: (Boolean) -> Unit) {
     val context = LocalContext.current
 
     // A phone with no PIN, pattern or fingerprint cannot ask for one, so the
     // switch says why instead of producing a lock nobody can get past.
     val lockAvailable = remember { canLock(context) }
 
-    HorizontalDivider()
-
-    SectionHeading("Privacy")
-    ListItem(
-        headlineContent = { Text("App lock") },
-        supportingContent = {
-            Text(
-                if (lockAvailable) {
-                    "Ask for your screen lock when PayChat comes back to the front."
-                } else {
-                    "Set a screen lock on this phone first."
-                }
-            )
-        },
-        trailingContent = {
-            Switch(
-                checked = state.appLockEnabled,
-                onCheckedChange = onToggleAppLock,
-                enabled = lockAvailable,
-            )
-        },
-    )
+    ProfileCard("Privacy") {
+        ListItem(
+            colors = cardRowColours(),
+            headlineContent = { Text("App lock") },
+            supportingContent = {
+                Text(
+                    if (lockAvailable) {
+                        "Ask for your screen lock when PayChat comes back to the front."
+                    } else {
+                        "Set a screen lock on this phone first."
+                    }
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = state.appLockEnabled,
+                    onCheckedChange = onToggleAppLock,
+                    enabled = lockAvailable,
+                )
+            },
+        )
+    }
 }
 
 /** The theme the user picked; nothing here forces a theme. */
 @Composable
-internal fun AppearanceSection(state: SettingsUiState, onChooseTheme: (ThemeChoice) -> Unit) {
-    HorizontalDivider()
-
-    SectionHeading("Appearance")
-    ThemeRow(current = state.theme, onChoose = onChooseTheme)
+internal fun AppearanceSection(state: ProfileUiState, onChooseTheme: (ThemeChoice) -> Unit) {
+    ProfileCard("Appearance") {
+        ThemeRow(current = state.theme, onChoose = onChooseTheme)
+    }
 }
 
 /** Taking the account's records out of the app. */
 @Composable
 internal fun DataSection(
-    state: SettingsUiState,
+    state: ProfileUiState,
     onExportStatements: () -> Unit,
     onExportData: () -> Unit,
 ) {
-    HorizontalDivider()
+    ProfileCard("Your money") {
+        ListItem(
+            colors = cardRowColours(),
+            modifier = Modifier.clickable(
+                enabled = !state.exporting,
+                onClick = onExportStatements,
+            ),
+            headlineContent = { Text("Export all statements") },
+            supportingContent = {
+                Text("One PDF covering every conversation with a closing balance.")
+            },
+            trailingContent = {
+                if (state.exporting) CircularProgressIndicator(Modifier.size(20.dp))
+            },
+        )
 
-    SectionHeading("Your money")
-    ListItem(
-        modifier = Modifier.clickable(
-            enabled = !state.exporting,
-            onClick = onExportStatements,
-        ),
-        headlineContent = { Text("Export all statements") },
-        supportingContent = {
-            Text("One PDF covering every conversation with a closing balance.")
-        },
-        trailingContent = {
-            if (state.exporting) CircularProgressIndicator(Modifier.size(20.dp))
-        },
-    )
-
-    ListItem(
-        modifier = Modifier.clickable(
-            enabled = !state.exporting,
-            onClick = onExportData,
-        ),
-        headlineContent = { Text("Export my data") },
-        supportingContent = {
-            Text("Every conversation, message and transaction, as JSON.")
-        },
-    )
+        ListItem(
+            colors = cardRowColours(),
+            modifier = Modifier.clickable(
+                enabled = !state.exporting,
+                onClick = onExportData,
+            ),
+            headlineContent = { Text("Export my data") },
+            supportingContent = {
+                Text("Every conversation, message and transaction, as JSON.")
+            },
+        )
+    }
 }
 
 /**
- * Leaving, and leaving for good. The delete row carries [SettingsUiState.deleting]
+ * Leaving, and leaving for good. The delete row carries [ProfileUiState.deleting]
  * so it stays inert while the account is being removed.
+ *
+ * Its own card, so a scroll cannot land a destructive tap next to a harmless one.
  */
 @Composable
 internal fun DangerSection(
-    state: SettingsUiState,
+    state: ProfileUiState,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
 ) {
-    HorizontalDivider()
+    ProfileCard("Account") {
+        ListItem(
+            colors = cardRowColours(),
+            modifier = Modifier.clickable(onClick = onSignOut),
+            headlineContent = {
+                Text("Sign out", color = MaterialTheme.colorScheme.error)
+            },
+            supportingContent = {
+                Text("This device stops receiving notifications for the account.")
+            },
+        )
 
-    ListItem(
-        modifier = Modifier.clickable(onClick = onSignOut),
-        headlineContent = {
-            Text("Sign out", color = MaterialTheme.colorScheme.error)
-        },
-        supportingContent = {
-            Text("This device stops receiving notifications for the account.")
-        },
-    )
-
-    ListItem(
-        modifier = Modifier.clickable(
-            enabled = !state.deleting,
-            onClick = onDeleteAccount,
-        ),
-        headlineContent = {
-            Text("Delete my account", color = MaterialTheme.colorScheme.error)
-        },
-        supportingContent = {
-            Text("Permanent. Your profile and your number are released.")
-        },
-        trailingContent = {
-            if (state.deleting) CircularProgressIndicator(Modifier.size(20.dp))
-        },
-    )
+        ListItem(
+            colors = cardRowColours(),
+            modifier = Modifier.clickable(
+                enabled = !state.deleting,
+                onClick = onDeleteAccount,
+            ),
+            headlineContent = {
+                Text("Delete my account", color = MaterialTheme.colorScheme.error)
+            },
+            supportingContent = {
+                Text("Permanent. Your profile and your number are released.")
+            },
+            trailingContent = {
+                if (state.deleting) CircularProgressIndicator(Modifier.size(20.dp))
+            },
+        )
+    }
 }
 
 @Composable

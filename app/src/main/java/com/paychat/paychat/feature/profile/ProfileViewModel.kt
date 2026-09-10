@@ -1,24 +1,27 @@
-package com.paychat.paychat.feature.settings
+package com.paychat.paychat.feature.profile
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.data.account.AccountRepository
+import com.paychat.paychat.data.chat.ThreadsRepository
 import com.paychat.paychat.data.export.DataExporter
 import com.paychat.paychat.data.export.StatementExporter
 import com.paychat.paychat.data.profile.ProfileRepository
 import com.paychat.paychat.data.settings.AppPreferences
 import com.paychat.paychat.data.settings.ThemeChoice
+import com.paychat.paychat.data.transactions.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class SettingsUiState(
+data class ProfileUiState(
     val name: String = "",
     val phone: String = "",
     val photoUrl: String? = null,
@@ -34,19 +37,23 @@ data class SettingsUiState(
     /** Flipped once the account is gone, which sends the app back to sign in. */
     val deleted: Boolean = false,
     val message: String? = null,
+    /** Where the account stands, shown on the identity card. */
+    val stats: ProfileStats = ProfileStats.EMPTY,
 )
 
 @HiltViewModel
-class SettingsViewModel @Inject constructor(
+class ProfileViewModel @Inject constructor(
     private val profile: ProfileRepository,
     private val preferences: AppPreferences,
     private val exporter: StatementExporter,
     private val dataExporter: DataExporter,
     private val account: AccountRepository,
+    private val threads: ThreadsRepository,
+    private val transactions: TransactionRepository,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(SettingsUiState())
-    val state: StateFlow<SettingsUiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(ProfileUiState())
+    val state: StateFlow<ProfileUiState> = _state.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -69,6 +76,16 @@ class SettingsViewModel @Inject constructor(
             preferences.appLockEnabled.collect { on ->
                 _state.update { it.copy(appLockEnabled = on) }
             }
+        }
+
+        // Both tables are already cached, so the card reads from Room and needs
+        // no sync of its own — whichever tab last synced them is enough.
+        viewModelScope.launch {
+            combine(
+                threads.observeThreads(),
+                transactions.observeBalances(),
+            ) { threadRows, balances -> ProfileStats.from(threadRows, balances) }
+                .collect { stats -> _state.update { it.copy(stats = stats) } }
         }
     }
 
