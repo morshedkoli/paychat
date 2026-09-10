@@ -18,6 +18,10 @@ data class LedgerColors(
     val pending: Color,
     val outgoingBubble: Color,
     val incomingBubble: Color,
+    val heroStart: Color,
+    val heroEnd: Color,
+    val creditContainer: Color,
+    val debitContainer: Color,
 )
 
 val LocalLedgerColors = staticCompositionLocalOf {
@@ -27,6 +31,10 @@ val LocalLedgerColors = staticCompositionLocalOf {
         pending = PendingLight,
         outgoingBubble = OutgoingBubbleLight,
         incomingBubble = IncomingBubbleLight,
+        heroStart = HeroStartLight,
+        heroEnd = HeroEndLight,
+        creditContainer = CreditContainerLight,
+        debitContainer = DebitContainerLight,
     )
 }
 

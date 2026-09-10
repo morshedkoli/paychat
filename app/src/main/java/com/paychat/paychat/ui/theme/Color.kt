@@ -29,3 +29,15 @@ val OutgoingBubbleLight = Color(0xFFD8F5EA)
 val OutgoingBubbleDark = Color(0xFF14453A)
 val IncomingBubbleLight = Color(0xFFFFFFFF)
 val IncomingBubbleDark = Color(0xFF23292B)
+
+// The Transactions balance hero. A gradient, so two stops per theme.
+val HeroStartLight = Color(0xFFDCF0E4)
+val HeroEndLight = Color(0xFFE4ECF4)
+val HeroStartDark = Color(0xFF1F4D38)
+val HeroEndDark = Color(0xFF20303F)
+
+// Fills behind the direction arrow on a feed row.
+val CreditContainerLight = Color(0xFFD3ECDD)
+val DebitContainerLight = Color(0xFFF7DAD7)
+val CreditContainerDark = Color(0xFF1F4D38)
+val DebitContainerDark = Color(0xFF4D2320)

@@ -50,9 +50,15 @@ fun PayChatTheme(
     }
 
     val ledgerColors = if (darkTheme) {
-        LedgerColors(CreditDark, DebitDark, PendingDark, OutgoingBubbleDark, IncomingBubbleDark)
+        LedgerColors(
+            CreditDark, DebitDark, PendingDark, OutgoingBubbleDark, IncomingBubbleDark,
+            HeroStartDark, HeroEndDark, CreditContainerDark, DebitContainerDark,
+        )
     } else {
-        LedgerColors(CreditLight, DebitLight, PendingLight, OutgoingBubbleLight, IncomingBubbleLight)
+        LedgerColors(
+            CreditLight, DebitLight, PendingLight, OutgoingBubbleLight, IncomingBubbleLight,
+            HeroStartLight, HeroEndLight, CreditContainerLight, DebitContainerLight,
+        )
     }
 
     CompositionLocalProvider(LocalLedgerColors provides ledgerColors) {
