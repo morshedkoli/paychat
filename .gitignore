@@ -16,3 +16,6 @@ local.properties
 /.kotlin/
 /keystore.properties
 *.jks
+
+# Superpowers brainstorm scratch
+.superpowers/
