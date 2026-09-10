@@ -14,6 +14,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -110,6 +111,12 @@ class TransactionsViewModelTest {
         model.state.test {
             awaitItem().let { if (it.loading) awaitItem() else it }
             model.loadMore()
+            // StandardTestDispatcher queues the re-subscription rather than
+            // running it eagerly, so drain it before asserting on the query
+            // it caused. The resulting state is equal to the prior one (same
+            // rows), and StateFlow only emits distinct values, so there is
+            // no further item to await here.
+            advanceUntilIdle()
             cancelAndIgnoreRemainingEvents()
         }
 
