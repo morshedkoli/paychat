@@ -16,7 +16,6 @@ enum class FeedFilter { ALL, YOU_GAVE, YOU_GOT }
  */
 data class FeedRow(
     val txnId: String,
-    val threadId: String,
     val peerName: String,
     val amount: Money,
     /** True when the viewer handed the money over, whoever wrote the row. */
@@ -38,6 +37,9 @@ data class FeedDay(val label: String, val rows: List<FeedRow>)
  */
 object TransactionFeed {
 
+    /** Stands in for a peer whose thread row has not synced yet. */
+    const val UNKNOWN_PEER = "Unknown"
+
     fun rows(
         transactions: List<TransactionEntity>,
         threads: List<ThreadEntity>,
@@ -49,10 +51,10 @@ object TransactionFeed {
         return transactions.map { txn ->
             FeedRow(
                 txnId = txn.txnId,
-                threadId = txn.threadId,
                 // A transaction can arrive before its thread row does, so a
-                // missing name is normal and must not drop the row.
-                peerName = nameByThread[txn.threadId].orEmpty(),
+                // missing name is normal: keep the row, and stand a
+                // placeholder in until the thread lands.
+                peerName = nameByThread[txn.threadId] ?: UNKNOWN_PEER,
                 amount = Money(txn.amountMinor),
                 viewerIsPayer = BalanceCalculator.viewerIsPayer(txn, viewerUid),
                 note = txn.note,

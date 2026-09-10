@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -45,22 +46,38 @@ class TransactionsViewModel @Inject constructor(
     private val limit = MutableStateFlow(PAGE)
     private val filter = MutableStateFlow(FeedFilter.ALL)
 
+    /**
+     * True once the table has handed back fewer rows than it was asked for,
+     * which means there is nothing further to read. The feed's load-more
+     * trigger keys on the filtered row count, so with a narrow filter it can
+     * sit on screen and fire repeatedly; this latch stops that from walking
+     * the limit up through the whole table.
+     */
+    private var exhausted = false
+
     init {
         val viewerUid = transactions.viewerUid()
 
         viewModelScope.launch {
             combine(
-                limit.flatMapLatest { query.observeRecent(it) },
+                limit.flatMapLatest { asked -> query.observeRecent(asked).map { it to asked } },
                 threads.observeThreads(),
                 transactions.observeBalances(),
                 filter,
-            ) { txns, threadRows, balances, chosen ->
+            ) { (txns, asked), threadRows, balances, chosen ->
+                exhausted = txns.size < asked
+
                 // No session means nothing to attribute rows to, so show none
                 // rather than guess a side.
                 val rows = if (viewerUid == null) emptyList()
                 else TransactionFeed.rows(txns, threadRows, viewerUid)
 
-                val balanceAmounts = balances.map { Money(it.amountMinor) }
+                // Only balances with a thread the user can actually open count:
+                // on a fresh install the balance cache can land before the
+                // threads do, and a total the user cannot drill into is worse
+                // than a total that fills in a moment later.
+                val balanceByThread = balances.associate { it.threadId to Money(it.amountMinor) }
+                val balanceAmounts = threadRows.map { balanceByThread[it.threadId] ?: Money.ZERO }
                 TransactionsUiState(
                     summary = BalanceCalculator.summarise(balanceAmounts),
                     people = balanceAmounts.count { !it.isZero },
@@ -78,6 +95,7 @@ class TransactionsViewModel @Inject constructor(
 
     /** Reads one page further. Harmless to call at the end of the list. */
     fun loadMore() {
+        if (exhausted) return
         limit.update { it + PAGE }
     }
 }

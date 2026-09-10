@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -75,7 +75,7 @@ fun ChatsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = onNewChat) {
-                Icon(Icons.Default.Chat, contentDescription = "Start a chat")
+                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Start a chat")
             }
         },
     ) { inner ->
@@ -95,7 +95,7 @@ fun ChatsScreen(
 
             if (state.threads.isEmpty() && !state.loading) {
                 EmptyState(
-                    icon = Icons.Default.Chat,
+                    icon = Icons.AutoMirrored.Filled.Chat,
                     title = "No conversations yet",
                     body = "Start one with someone in your contacts, or add a " +
                         "number by hand and record money against it.",

@@ -187,7 +187,11 @@ private fun FeedRowItem(row: FeedRow, onClick: () -> Unit) {
     val ledger = PayChatTheme.ledger
     val dimmed = row.unconfirmed || row.pending
 
+    // The direction in words, in the same vocabulary as the filter chips.
+    val direction = if (row.viewerIsPayer) "You gave" else "You got"
+
     val supporting = buildList {
+        add(direction)
         row.note?.let { add(it) }
         if (row.unconfirmed) add("Awaiting review")
         if (row.pending) add("Waiting for them")
@@ -196,9 +200,7 @@ private fun FeedRowItem(row: FeedRow, onClick: () -> Unit) {
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
         headlineContent = { Text(row.peerName) },
-        supportingContent = if (supporting.isNotBlank()) {
-            { Text(supporting) }
-        } else null,
+        supportingContent = { Text(supporting) },
         leadingContent = {
             Box(
                 modifier = Modifier
@@ -211,14 +213,14 @@ private fun FeedRowItem(row: FeedRow, onClick: () -> Unit) {
             ) {
                 Icon(
                     imageVector = if (row.viewerIsPayer) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
-                    contentDescription = null,
+                    contentDescription = direction,
                     tint = if (row.viewerIsPayer) ledger.credit else ledger.debit,
                 )
             }
         },
         trailingContent = {
             val amountColor = if (row.viewerIsPayer) ledger.credit else ledger.debit
-            val sign = if (row.viewerIsPayer) "+" else "−"
+            val sign = if (row.viewerIsPayer) "+" else "-"
             CompositionLocalProvider(
                 LocalContentColor provides if (dimmed) amountColor.copy(alpha = 0.5f) else amountColor,
             ) {

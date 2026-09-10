@@ -11,6 +11,7 @@ import com.paychat.paychat.data.transactions.TransactionQuery
 import com.paychat.paychat.data.transactions.TransactionRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -106,8 +107,15 @@ class TransactionsViewModelTest {
     }
 
     @Test
-    fun `loading more asks for a bigger page`() = runTest {
-        val model = viewModel()
+    fun `loading more asks for a bigger page while the table is still full`() = runTest {
+        // A full first page means there may well be more behind it.
+        val fullPage = List(100) { txn("t$it", TxnDirection.SENT) }
+        every { transactions.viewerUid() } returns me
+        every { query.observeRecent(any()) } returns flowOf(fullPage)
+        every { threads.observeThreads() } returns flowOf(emptyList())
+        every { transactions.observeBalances() } returns flowOf(emptyList())
+        val model = TransactionsViewModel(query, transactions, threads)
+
         model.state.test {
             awaitItem().let { if (it.loading) awaitItem() else it }
             model.loadMore()
@@ -120,6 +128,80 @@ class TransactionsViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
 
-        io.mockk.verify { query.observeRecent(200) }
+        verify { query.observeRecent(200) }
+    }
+
+    @Test
+    fun `loading more stops once the table returns fewer rows than asked for`() = runTest {
+        // The stub hands back two rows against a page of a hundred, so the
+        // table is exhausted and no wider read is justified however often the
+        // trailing item asks — which a narrow filter makes it do.
+        val model = viewModel()
+        model.state.test {
+            awaitItem().let { if (it.loading) awaitItem() else it }
+            model.loadMore()
+            model.loadMore()
+            model.loadMore()
+            advanceUntilIdle()
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(exactly = 1) { query.observeRecent(100) }
+        verify(exactly = 0) { query.observeRecent(200) }
+    }
+
+    @Test
+    fun `a balance whose thread has not arrived is left out of the hero`() = runTest {
+        every { transactions.viewerUid() } returns me
+        every { query.observeRecent(any()) } returns flowOf(emptyList())
+        every { threads.observeThreads() } returns flowOf(emptyList())
+        every { transactions.observeBalances() } returns flowOf(
+            listOf(ThreadBalanceEntity(threadId = "thread-1", amountMinor = 155000, updatedAt = 0))
+        )
+
+        TransactionsViewModel(query, transactions, threads).state.test {
+            val loaded = awaitItem().let { if (it.loading) awaitItem() else it }
+            assertEquals(0, loaded.people)
+            assertEquals(0, loaded.summary.net.minor)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `an unconfirmed row shows in the list without moving the hero`() = runTest {
+        every { transactions.viewerUid() } returns me
+        every { query.observeRecent(any()) } returns flowOf(
+            listOf(
+                txn("gave", TxnDirection.SENT, 240000),
+                txn("inherited", TxnDirection.SENT, 500000)
+                    .copy(createdBy = "uid-them", unconfirmed = true),
+            )
+        )
+        every { threads.observeThreads() } returns flowOf(
+            listOf(
+                ThreadEntity(
+                    threadId = "thread-1",
+                    peerUid = "uid-them",
+                    peerName = "Rakib",
+                    peerPhone = "+8801712345678",
+                    isLocal = false,
+                    lastMessageAt = 0,
+                )
+            )
+        )
+        every { transactions.observeBalances() } returns flowOf(
+            listOf(ThreadBalanceEntity(threadId = "thread-1", amountMinor = 240000, updatedAt = 0))
+        )
+
+        TransactionsViewModel(query, transactions, threads).state.test {
+            val loaded = awaitItem().let { if (it.loading) awaitItem() else it }
+            val rows = loaded.days.flatMap { it.rows }
+            assertEquals(listOf("gave", "inherited"), rows.map { it.txnId }.sorted())
+            assertEquals(true, rows.single { it.txnId == "inherited" }.unconfirmed)
+            // The hero reads the balance cache, which does not count the
+            // unreviewed row, so it stays where it was.
+            assertEquals(240000, loaded.summary.net.minor)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

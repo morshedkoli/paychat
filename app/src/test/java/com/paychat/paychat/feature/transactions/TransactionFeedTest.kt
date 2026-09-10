@@ -86,7 +86,7 @@ class TransactionFeedTest {
     }
 
     @Test
-    fun `a transaction whose thread is missing is still listed`() {
+    fun `a transaction whose thread is missing is listed under a placeholder`() {
         val rows = TransactionFeed.rows(
             transactions = listOf(txn("t1", createdBy = me, direction = TxnDirection.SENT)),
             threads = emptyList(),
@@ -94,7 +94,7 @@ class TransactionFeedTest {
         )
 
         assertEquals(1, rows.size)
-        assertEquals("", rows.single().peerName)
+        assertEquals(TransactionFeed.UNKNOWN_PEER, rows.single().peerName)
     }
 
     @Test
