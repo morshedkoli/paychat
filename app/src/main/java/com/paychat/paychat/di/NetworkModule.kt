@@ -34,4 +34,8 @@ object NetworkModule {
             }
         }
         .build()
+
+    @Provides
+    @Singleton
+    fun provideNetworkMonitor(monitor: com.paychat.paychat.core.network.LiveNetworkMonitor): com.paychat.paychat.core.network.NetworkMonitor = monitor
 }

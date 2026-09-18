@@ -14,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.CircularProgressIndicator
+import com.paychat.paychat.ui.components.PayChatSpinner
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -47,6 +47,7 @@ import com.paychat.paychat.ui.components.Timestamps
 import com.paychat.paychat.ui.components.shareStatement
 import com.paychat.paychat.ui.theme.AmountLargeStyle
 import com.paychat.paychat.ui.theme.AmountStyle
+import com.paychat.paychat.ui.theme.LocalHideBalances
 import com.paychat.paychat.ui.theme.PayChatTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,7 +102,7 @@ fun LedgerScreen(
                         enabled = !state.exporting && state.lines.isNotEmpty(),
                     ) {
                         if (state.exporting) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            PayChatSpinner(size = 20.dp, strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                         } else {
                             Icon(Icons.Filled.Share, contentDescription = "Export statement")
                         }
@@ -160,6 +161,7 @@ fun LedgerScreen(
 @Composable
 private fun ClosingBalance(balance: Money, peerName: String) {
     val ledger = PayChatTheme.ledger
+    val hideBalances = LocalHideBalances.current
 
     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
         Column(
@@ -176,7 +178,7 @@ private fun ClosingBalance(balance: Money, peerName: String) {
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-                text = balance.abs().format(),
+                text = if (hideBalances) Money.MASKED else balance.abs().format(),
                 style = AmountLargeStyle,
                 color = when {
                     balance.isZero -> MaterialTheme.colorScheme.onPrimaryContainer
@@ -227,9 +229,10 @@ private fun StatementRow(
             )
         }
 
+        val hideBalances = LocalHideBalances.current
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = Money(transaction.amountMinor).format(),
+                text = if (hideBalances) Money.MASKED else Money(transaction.amountMinor).format(),
                 style = AmountStyle,
                 color = when {
                     !counts -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -241,7 +244,7 @@ private fun StatementRow(
             // The balance as it stood after this entry, which is what makes a
             // statement readable rather than a list of amounts.
             Text(
-                text = if (counts) line.runningBalance.formatSigned() else "",
+                text = if (counts) (if (hideBalances) Money.MASKED else line.runningBalance.formatSigned()) else "",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

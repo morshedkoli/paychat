@@ -195,8 +195,12 @@ service cloud.firestore {
         // long paragraph is either a bug or an attempt to fill the database
         // at the project's expense.
         function validMessage() {
+          // A photo, a voice note and a transaction card all carry a null
+          // text, so the length check has to pass a null through rather than
+          // call size() on it. See validNote below.
           return incoming().type in ['TEXT', 'IMAGE', 'VOICE', 'TXN', 'SYSTEM']
-              && incoming().get('text', '').size() <= 4000
+              && (incoming().get('text', null) == null
+                  || incoming().text.size() <= 4000)
               && incoming().createdAt is int
               && incoming().keys().hasOnly([
                    'senderId', 'type', 'text', 'mediaUrl', 'mediaPublicId',
@@ -250,9 +254,20 @@ service cloud.firestore {
               && incoming().amountMinor <= 1000000000;
         }
 
+        // An optional field is written as an explicit null rather than left
+        // out: the client uploads the whole entry on every retry, and a field
+        // that has been cleared — `reversedBy` when a correction is refused —
+        // has to be cleared on the server too, which omitting it would not do.
+        //
+        // `get(field, default)` only supplies the default when the key is
+        // absent, so a present null came back as null, and `null.size()` and
+        // `null is int` are an error and a false. Both denied every entry with
+        // no note or no due date, which is most of them.
         function validNote() {
-          return incoming().get('note', '').size() <= 500
-              && (incoming().get('dueDate', 0) is int);
+          return (incoming().get('note', null) == null
+                  || incoming().note.size() <= 500)
+              && (incoming().get('dueDate', null) == null
+                  || incoming().dueDate is int);
         }
 
         function validDirection() {

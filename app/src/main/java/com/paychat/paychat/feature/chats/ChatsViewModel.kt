@@ -45,10 +45,15 @@ data class ChatsUiState(
 class ChatsViewModel @Inject constructor(
     private val threads: ThreadsRepository,
     private val transactions: TransactionRepository,
+    private val preferences: com.paychat.paychat.data.settings.AppPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatsUiState())
     val state: StateFlow<ChatsUiState> = _state.asStateFlow()
+
+    fun toggleHideBalances(current: Boolean) {
+        viewModelScope.launch { preferences.setHideBalances(!current) }
+    }
 
     init {
         // Room drives the screen, so it renders immediately from cache and
@@ -96,6 +101,12 @@ class ChatsViewModel @Inject constructor(
         viewModelScope.launch {
             threads.syncThreads().collect { threads.persist(it) }
         }
+
+        // A decision taken by the other person while this device was not
+        // running arrives as a push, and a push can be missed — the app was
+        // force stopped, or notifications are off. Anything still shown as
+        // pending is therefore re-read once when the list opens.
+        viewModelScope.launch { transactions.refreshPending() }
 
         // Without this a fresh install would show zero everywhere until each
         // conversation had been opened and its transactions downloaded.

@@ -38,10 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.paychat.paychat.core.phone.Countries
 import com.paychat.paychat.core.phone.Country
-import com.paychat.paychat.ui.theme.Ink20
 
 /**
- * A phone number as a country and a national number.
  *
  * The country is chosen rather than inferred. A number typed without one has
  * to be assumed to belong to somewhere, and assuming wrongly either fails to
@@ -176,10 +174,7 @@ private fun CountryPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        // An opaque ink panel. The surrounding scheme's surface is a
-        // translucent white meant to sit on the gradient backdrop, and over
-        // the sheet's own scrim it turns to flat grey.
-        containerColor = Ink20,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             Text(

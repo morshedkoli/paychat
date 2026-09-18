@@ -2,42 +2,58 @@ package com.paychat.paychat.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand
-val Teal90 = Color(0xFF9FF2DC)
-val Teal60 = Color(0xFF2AAF92)
-val Teal40 = Color(0xFF0B7A63)
-val Teal20 = Color(0xFF00402F)
-val Teal10 = Color(0xFF002019)
+// WhatsApp Signature Palette
+val WhatsAppForestGreen = Color(0xFF008069) // WhatsApp light primary / app bar
+val WhatsAppTealGreen = Color(0xFF00A884)   // WhatsApp dark primary & action accent
+val WhatsAppVibrantGreen = Color(0xFF25D366) // Badges, active online indicator
+val WhatsAppBlueTicks = Color(0xFF53BDEB)    // Double blue read ticks
 
-val Sand95 = Color(0xFFF3F1E9)
-val Ink10 = Color(0xFF14181A)
-val Ink20 = Color(0xFF1E2426)
-val Ink90 = Color(0xFFDEE4E4)
+// Legacy brand aliases mapping to WhatsApp palette
+val Teal90 = Color(0xFFC7F8EC)
+val Teal60 = WhatsAppTealGreen
+val Teal40 = WhatsAppForestGreen
+val Teal20 = Color(0xFF00382E)
+val Teal10 = Color(0xFF001F19)
 
-// Ledger semantics. Green means money coming to the viewer, red means going out.
-// These are deliberately distinguishable in both themes and are never the only
-// signal used - direction is always also stated in words.
-val CreditLight = Color(0xFF14804A)
-val CreditDark = Color(0xFF5BD69B)
-val DebitLight = Color(0xFFC0392B)
-val DebitDark = Color(0xFFFF8A7A)
-val PendingLight = Color(0xFF8A6100)
-val PendingDark = Color(0xFFEFC061)
+// Dark Theme Surfaces & Backgrounds
+val DarkAppBackground = Color(0xFF0B141A)    // WhatsApp dark background
+val DarkSurface = Color(0xFF111B21)          // WhatsApp dark chat list item & surface
+val DarkHeader = Color(0xFF1F2C34)           // WhatsApp dark top app bar
+val DarkTextPrimary = Color(0xFFE9EDEF)      // High contrast text
+val DarkTextSecondary = Color(0xFF8696A0)    // Muted timestamps & subtitles
+val DarkDivider = Color(0xFF222D34)          // Subtile hairline divider
 
-// Chat bubbles
-val OutgoingBubbleLight = Color(0xFFD8F5EA)
-val OutgoingBubbleDark = Color(0xFF14453A)
-val IncomingBubbleLight = Color(0xFFFFFFFF)
-val IncomingBubbleDark = Color(0xFF23292B)
+// Light Theme Surfaces & Backgrounds
+val LightAppBackground = Color(0xFFFFFFFF)   // Clean white background
+val LightSurface = Color(0xFFFFFFFF)         // Clean white surfaces
+val LightHeader = WhatsAppForestGreen        // Forest green header
+val LightChatCanvas = Color(0xFFEFEAE2)      // WhatsApp signature chat wallpaper tint
+val LightTextPrimary = Color(0xFF111B21)     // Deep slate text
+val LightTextSecondary = Color(0xFF667781)   // Muted timestamps & subtitles
+val LightDivider = Color(0xFFF0F2F5)         // Clean light divider
 
-// The Transactions balance hero. A gradient, so two stops per theme.
-val HeroStartLight = Color(0xFFDCF0E4)
-val HeroEndLight = Color(0xFFE4ECF4)
-val HeroStartDark = Color(0xFF1F4D38)
-val HeroEndDark = Color(0xFF20303F)
+// Chat Bubbles (Authentic WhatsApp colors)
+val OutgoingBubbleLight = Color(0xFFD9FDD3)  // WhatsApp light outgoing bubble
+val OutgoingBubbleDark = Color(0xFF005C4B)   // WhatsApp dark outgoing bubble
+val IncomingBubbleLight = Color(0xFFFFFFFF)  // WhatsApp light incoming bubble
+val IncomingBubbleDark = Color(0xFF202C33)   // WhatsApp dark incoming bubble
 
-// Fills behind the direction arrow on a feed row.
-val CreditContainerLight = Color(0xFFD3ECDD)
-val DebitContainerLight = Color(0xFFF7DAD7)
-val CreditContainerDark = Color(0xFF1F4D38)
-val DebitContainerDark = Color(0xFF4D2320)
+// Financial Ledger Semantics (Adapted to WhatsApp Aesthetic)
+val CreditLight = WhatsAppForestGreen
+val CreditDark = WhatsAppTealGreen
+val DebitLight = Color(0xFFD93025)
+val DebitDark = Color(0xFFF15C6D)
+val PendingLight = Color(0xFFD97706)
+val PendingDark = Color(0xFFF59E0B)
+
+// Transaction Hero Card Stops
+val HeroStartLight = Color(0xFFE8F5E9)
+val HeroEndLight = Color(0xFFE0F2F1)
+val HeroStartDark = Color(0xFF112B23)
+val HeroEndDark = Color(0xFF143630)
+
+// Direction Arrow Containers
+val CreditContainerLight = Color(0xFFD8F3E5)
+val DebitContainerLight = Color(0xFFFCE8E6)
+val CreditContainerDark = Color(0xFF163E32)
+val DebitContainerDark = Color(0xFF4A1F1D)

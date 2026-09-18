@@ -31,11 +31,11 @@ value class Money(val minor: Long) : Comparable<Money> {
     /** "1,250.50" - digits only, no symbol. */
     fun formatPlain(): String = plainFormat.format(BigDecimal.valueOf(minor, 2))
 
-    /** "BDT 1,250.50" using the taka sign. */
-    fun format(): String = SYMBOL + formatPlain()
+    /** "BDT 1,250.50" using the taka sign, or "৳ ••••••" if masked. */
+    fun format(masked: Boolean = false): String = if (masked) MASKED else SYMBOL + formatPlain()
 
-    /** "+BDT 1,250.50" / "-BDT 1,250.50" - used in ledger rows. */
-    fun formatSigned(): String = when {
+    /** "+BDT 1,250.50" / "-BDT 1,250.50" - used in ledger rows, or "৳ ••••••" if masked. */
+    fun formatSigned(masked: Boolean = false): String = if (masked) MASKED else when {
         minor > 0 -> "+" + SYMBOL + abs().formatPlain()
         minor < 0 -> "-" + SYMBOL + abs().formatPlain()
         else -> SYMBOL + formatPlain()
@@ -46,6 +46,7 @@ value class Money(val minor: Long) : Comparable<Money> {
     companion object {
         const val SYMBOL = "৳"          // Bengali taka sign
         const val CURRENCY_CODE = "BDT"
+        const val MASKED = "৳ ••••••"
         val ZERO = Money(0)
 
         private val plainFormat: DecimalFormat

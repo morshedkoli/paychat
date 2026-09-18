@@ -26,6 +26,8 @@ data class TransactionsUiState(
     val people: Int = 0,
     val days: List<FeedDay> = emptyList(),
     val filter: FeedFilter = FeedFilter.ALL,
+    val analytics: SpendingAnalytics = SpendingAnalytics.EMPTY,
+    val showAnalytics: Boolean = false,
     val loading: Boolean = true,
 )
 
@@ -38,6 +40,7 @@ class TransactionsViewModel @Inject constructor(
     private val query: TransactionQuery,
     private val transactions: TransactionRepository,
     private val threads: ThreadsRepository,
+    private val preferences: com.paychat.paychat.data.settings.AppPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(TransactionsUiState())
@@ -45,6 +48,7 @@ class TransactionsViewModel @Inject constructor(
 
     private val limit = MutableStateFlow(PAGE)
     private val filter = MutableStateFlow(FeedFilter.ALL)
+    private val showAnalytics = MutableStateFlow(false)
 
     /**
      * True once the table has handed back fewer rows than it was asked for,
@@ -64,7 +68,8 @@ class TransactionsViewModel @Inject constructor(
                 threads.observeThreads(),
                 transactions.observeBalances(),
                 filter,
-            ) { (txns, asked), threadRows, balances, chosen ->
+                showAnalytics,
+            ) { (txns, asked), threadRows, balances, chosen, analyticsVisible ->
                 exhausted = txns.size < asked
 
                 // No session means nothing to attribute rows to, so show none
@@ -83,6 +88,8 @@ class TransactionsViewModel @Inject constructor(
                     people = balanceAmounts.count { !it.isZero },
                     days = TransactionFeed.group(TransactionFeed.filter(rows, chosen)),
                     filter = chosen,
+                    analytics = SpendingAnalytics.compute(rows),
+                    showAnalytics = analyticsVisible,
                     loading = false,
                 )
             }.collect { next -> _state.update { next } }
@@ -93,9 +100,18 @@ class TransactionsViewModel @Inject constructor(
         filter.value = next
     }
 
+    fun toggleAnalytics() {
+        showAnalytics.update { !it }
+    }
+
+    fun toggleHideBalances(current: Boolean) {
+        viewModelScope.launch { preferences.setHideBalances(!current) }
+    }
+
     /** Reads one page further. Harmless to call at the end of the list. */
     fun loadMore() {
         if (exhausted) return
         limit.update { it + PAGE }
     }
 }
+

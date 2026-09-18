@@ -7,12 +7,16 @@ import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
 class PayChatApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var messageDao: com.paychat.paychat.data.local.dao.MessageDao
+    @Inject lateinit var transactionDao: com.paychat.paychat.data.local.dao.TransactionDao
+    @Inject lateinit var outboxScheduler: com.paychat.paychat.data.sync.OutboxScheduler
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -22,6 +26,17 @@ class PayChatApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        recoverAndSyncOutbox()
+    }
+
+    private fun recoverAndSyncOutbox() {
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+        ).launch {
+            messageDao.resetUploadingToPending()
+            transactionDao.resetUploadingToPending()
+            outboxScheduler.flush()
+        }
     }
 
     private fun createNotificationChannels() {

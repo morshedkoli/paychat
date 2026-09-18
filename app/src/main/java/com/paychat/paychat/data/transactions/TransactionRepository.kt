@@ -22,6 +22,7 @@ import com.paychat.paychat.data.local.entity.ThreadBalanceEntity
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.remote.Collections
 import com.paychat.paychat.data.remote.ThreadBalanceFields
+import com.paychat.paychat.data.remote.ThreadFields
 import com.paychat.paychat.data.remote.TransactionFields
 import com.paychat.paychat.data.remote.getLongOrTimestamp
 import com.paychat.paychat.data.sync.OutboxScheduler
@@ -113,7 +114,7 @@ class TransactionRepository @Inject constructor(
         threadDao.setLastMessage(threadId, "Transaction", now)
 
         refreshThread(threadId)
-        outbox.schedule()
+        outbox.scheduleAndFlush()
         txnId
     }
 
@@ -205,7 +206,7 @@ class TransactionRepository @Inject constructor(
             )
         )
         refreshThread(transaction.threadId)
-        outbox.schedule()
+        outbox.scheduleAndFlush()
     }
 
     /**
@@ -238,7 +239,7 @@ class TransactionRepository @Inject constructor(
 
         transactionDao.upsertAll(reviewed)
         refreshThread(threadId)
-        outbox.schedule()
+        outbox.scheduleAndFlush()
         reviewed.size
     }
 
@@ -264,7 +265,7 @@ class TransactionRepository @Inject constructor(
             )
         )
         refreshThread(transaction.threadId)
-        outbox.schedule()
+        outbox.scheduleAndFlush()
     }
 
     /**
@@ -295,7 +296,7 @@ class TransactionRepository @Inject constructor(
         }
         if (changed.isNotEmpty()) {
             transactionDao.upsertAll(changed)
-            outbox.schedule()
+            outbox.scheduleAndFlush()
         }
 
         val balance = BalanceCalculator.balanceOf(current, viewerUid)
@@ -308,6 +309,7 @@ class TransactionRepository @Inject constructor(
         // A freshly installed device has no transactions to add up yet, so the
         // figure is also stored per user on the server. It is a cache: losing
         // it costs nothing, because opening the conversation recomputes it.
+        // Fire-and-forget so offline recording never hangs.
         runCatching {
             firestore.collection(Collections.USERS).document(viewerUid)
                 .collection(Collections.THREAD_BALANCES).document(threadId)
@@ -316,7 +318,7 @@ class TransactionRepository @Inject constructor(
                         ThreadBalanceFields.AMOUNT_MINOR to balance.minor,
                         ThreadBalanceFields.UPDATED_AT to now,
                     )
-                ).await()
+                )
         }
     }
 
@@ -363,8 +365,20 @@ class TransactionRepository @Inject constructor(
         if (balances.isNotEmpty()) balanceDao.upsertAll(balances)
     }
 
-    /** Uploads one transaction. Called by the outbox worker. */
+    /** Uploads one transaction. Called by the outbox syncer. */
     suspend fun upload(transaction: TransactionEntity) {
+        val thread = threadDao.byId(transaction.threadId)
+        if (thread != null && !thread.isLocal && thread.peerUid != null) {
+            val members = listOf(transaction.createdBy, thread.peerUid).sorted()
+            firestore.collection(Collections.THREADS).document(transaction.threadId).set(
+                mapOf(
+                    ThreadFields.MEMBERS to members,
+                    ThreadFields.IS_LOCAL to false,
+                ),
+                SetOptions.merge(),
+            ).await()
+        }
+
         firestore.collection(Collections.THREADS)
             .document(transaction.threadId)
             .collection(Collections.TRANSACTIONS)
@@ -404,6 +418,32 @@ class TransactionRepository @Inject constructor(
 
         transactionDao.upsertAll(incoming)
         refreshThread(threadId)
+    }
+
+    /**
+     * Reads one conversation's transactions once, without a listener.
+     *
+     * The listener lives on the chat screen, so an entry accepted or rejected
+     * while its author was anywhere else in the app stayed PENDING on their
+     * device until they opened that conversation again. A push carries the
+     * thread id, and this is what it acts on.
+     */
+    suspend fun fetchThread(threadId: String): Result<Unit> = runCatching {
+        val snapshot = firestore.collection(Collections.THREADS)
+            .document(threadId)
+            .collection(Collections.TRANSACTIONS)
+            .get()
+            .await()
+
+        persist(threadId, snapshot.documents.mapNotNull { it.toEntity(threadId) })
+    }
+
+    /**
+     * Re-reads every conversation still holding a decision that is not this
+     * device's to make, for when the app is opened having missed the push.
+     */
+    suspend fun refreshPending(): Result<Unit> = runCatching {
+        transactionDao.threadsWithPending().forEach { threadId -> fetchThread(threadId) }
     }
 }
 

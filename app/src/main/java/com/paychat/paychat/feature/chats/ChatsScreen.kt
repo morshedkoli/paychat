@@ -1,24 +1,33 @@
 package com.paychat.paychat.feature.chats
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Badge
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.paychat.paychat.ui.theme.LocalHideBalances
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -27,20 +36,28 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.paychat.paychat.ui.components.Avatar
 import com.paychat.paychat.ui.components.EmptyState
 import com.paychat.paychat.ui.components.Timestamps
 import com.paychat.paychat.ui.theme.PayChatTheme
+import com.paychat.paychat.ui.theme.WhatsAppForestGreen
+import com.paychat.paychat.ui.theme.WhatsAppTealGreen
+import com.paychat.paychat.ui.theme.WhatsAppVibrantGreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,22 +81,61 @@ fun ChatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("PayChat") },
+                title = {
+                    Text(
+                        "PayChat",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.sp,
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
                 actions = {
+                    val hideBalances = LocalHideBalances.current
+                    IconButton(onClick = { viewModel.toggleHideBalances(hideBalances) }) {
+                        Icon(
+                            imageVector = if (hideBalances) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (hideBalances) "Show balances" else "Hide balances",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = onSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNewChat) {
-                Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Start a chat")
+            FloatingActionButton(
+                onClick = onNewChat,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = CircleShape,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Chat,
+                    contentDescription = "Start a chat",
+                    modifier = Modifier.size(24.dp),
+                )
             }
         },
     ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
 
             if (state.inheritedCount > 0) {
                 InheritedBanner(
@@ -91,14 +147,11 @@ fun ChatsScreen(
                 )
             }
 
-            HorizontalDivider()
-
             if (state.threads.isEmpty() && !state.loading) {
                 EmptyState(
                     icon = Icons.AutoMirrored.Filled.Chat,
                     title = "No conversations yet",
-                    body = "Start one with someone in your contacts, or add a " +
-                        "number by hand and record money against it.",
+                    body = "Start a chat with someone in your contacts or record money directly.",
                     actionLabel = "Start a chat",
                     onAction = onNewChat,
                 )
@@ -107,6 +160,11 @@ fun ChatsScreen(
             LazyColumn(Modifier.fillMaxSize()) {
                 items(state.threads, key = { it.threadId }) { thread ->
                     ThreadListItem(thread = thread, onClick = { onOpenThread(thread.threadId) })
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 76.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                    )
                 }
             }
         }
@@ -116,84 +174,160 @@ fun ChatsScreen(
 @Composable
 private fun ThreadListItem(thread: ThreadRow, onClick: () -> Unit) {
     val ledger = PayChatTheme.ledger
+    val hasUnread = thread.unreadCount > 0
 
-    ListItem(
-        headlineContent = {
-            Text(
-                thread.name,
-                fontWeight = if (thread.unreadCount > 0) FontWeight.SemiBold else null,
-            )
-        },
-        supportingContent = {
-            Text(
-                text = when {
-                    thread.awaitingConfirmation -> "Waiting for them to confirm your records"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Avatar(
+            name = thread.name,
+            key = thread.phone,
+            photoUrl = thread.photoUrl,
+            size = 50.dp,
+        )
+
+        Spacer(Modifier.width(14.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = thread.name,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                )
+                Text(
+                    text = Timestamps.forThreadList(thread.lastMessageAt),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                    color = if (hasUnread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Spacer(Modifier.height(3.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val previewText = when {
+                    thread.awaitingConfirmation -> "Pending confirmation…"
                     thread.lastMessage.isNotBlank() -> thread.lastMessage
                     thread.isLocal -> "Not on PayChat yet"
                     else -> "No messages yet"
-                },
-                maxLines = 1,
-            )
-        },
-        leadingContent = {
-            Avatar(name = thread.name, key = thread.phone, photoUrl = thread.photoUrl)
-        },
-        trailingContent = {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    Timestamps.forThreadList(thread.lastMessageAt),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                if (!thread.balance.isZero) {
-                    Text(
-                        text = thread.balance.formatSigned(),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (thread.balance.isPositive) ledger.credit else ledger.debit,
-                    )
                 }
-                if (thread.unreadCount > 0) {
-                    Badge { Text(thread.unreadCount.toString()) }
+
+                Text(
+                    text = previewText,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    color = if (hasUnread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (!thread.balance.isZero) {
+                        val isPositive = thread.balance.isPositive
+                        val hideBalances = LocalHideBalances.current
+                        val balanceColor = if (isPositive) ledger.credit else ledger.debit
+                        val balanceBg = if (isPositive) ledger.creditContainer else ledger.debitContainer
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(balanceBg.copy(alpha = 0.7f))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = thread.balance.formatSigned(hideBalances),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                ),
+                                color = balanceColor,
+                            )
+                        }
+                    }
+
+                    if (hasUnread) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(ledger.unreadBadge),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = if (thread.unreadCount > 99) "99+" else thread.unreadCount.toString(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+        }
+    }
 }
 
 /**
- * Money someone recorded against this user's number before they registered.
- * It counts for nobody until reviewed, so the banner stays until it is.
+ * WhatsApp-style notice banner for inherited entries.
  */
 @Composable
 private fun InheritedBanner(count: Int, threadCount: Int = 1, onReview: () -> Unit) {
     Surface(
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp)),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (count == 1) {
+                    text = if (count == 1) {
                         "1 entry was recorded before you joined"
-                    } else if (threadCount > 1) {
-                        "$count entries across $threadCount chats were recorded before you joined"
                     } else {
-                        "$count entries were recorded before you joined"
+                        "$count entries across $threadCount chats need review"
                     },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    "They do not count until you review them.",
+                    text = "Tap to review and confirm balance.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onReview) { Text("Review") }
+            TextButton(onClick = onReview) {
+                Text("Review", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }

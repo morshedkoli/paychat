@@ -94,6 +94,9 @@ interface MessageDao {
     @Query("UPDATE messages SET syncState = :state WHERE messageId = :messageId")
     suspend fun setSyncState(messageId: String, state: SyncState)
 
+    @Query("UPDATE messages SET syncState = 'PENDING' WHERE syncState = 'UPLOADING'")
+    suspend fun resetUploadingToPending()
+
     /** Records where an attachment ended up once it has been uploaded. */
     @Query(
         "UPDATE messages SET mediaUrl = :url, mediaPublicId = :publicId, localMediaPath = NULL " +
@@ -168,6 +171,9 @@ interface TransactionDao {
     @Query("UPDATE transactions SET syncState = :state WHERE txnId = :txnId")
     suspend fun setSyncState(txnId: String, state: SyncState)
 
+    @Query("UPDATE transactions SET syncState = 'PENDING' WHERE syncState = 'UPLOADING'")
+    suspend fun resetUploadingToPending()
+
     @Query(
         "UPDATE transactions SET photoUrl = :url, photoPublicId = :publicId, " +
             "localPhotoPath = NULL WHERE txnId = :txnId"
@@ -189,6 +195,16 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE syncState IN (:states)")
     suspend fun awaitingSync(states: List<SyncState>): List<TransactionEntity>
+
+    /**
+     * Conversations holding an entry whose fate is still open.
+     *
+     * A PENDING entry is the one row on this device that another person can
+     * change, and nothing local can know that they have. These are the only
+     * conversations worth re-reading when no chat screen is listening.
+     */
+    @Query("SELECT DISTINCT threadId FROM transactions WHERE status = 'PENDING'")
+    suspend fun threadsWithPending(): List<String>
 }
 
 @Dao
@@ -208,6 +224,9 @@ interface DeviceContactDao {
      */
     @Query("DELETE FROM device_contacts WHERE resolvedAt < :before")
     suspend fun deleteResolvedBefore(before: Long)
+
+    @Query("SELECT * FROM device_contacts WHERE phone = :phone LIMIT 1")
+    suspend fun byPhone(phone: String): DeviceContactEntity?
 }
 
 @Dao

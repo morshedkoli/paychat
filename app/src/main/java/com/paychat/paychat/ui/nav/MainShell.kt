@@ -1,21 +1,29 @@
 package com.paychat.paychat.ui.nav
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -24,16 +32,10 @@ import androidx.navigation.compose.rememberNavController
 import com.paychat.paychat.feature.chats.ChatsScreen
 import com.paychat.paychat.feature.profile.ProfileScreen
 import com.paychat.paychat.feature.transactions.TransactionsScreen
+import com.paychat.paychat.ui.theme.WhatsAppVibrantGreen
 
 /**
- * The signed in shell: three tabs over their own graph.
- *
- * The tab roots are deliberately in a nested graph rather than the outer one.
- * That gives each tab its own back stack and scroll position, and it makes it
- * impossible for the bottom bar to show up over a chat or a transaction, which
- * both want the bottom edge for themselves.
- *
- * @param onOpenOuter opens a full screen destination on the outer graph.
+ * The signed in shell: three tabs over their own graph with WhatsApp-style bottom navigation.
  */
 @Composable
 fun MainShell(
@@ -46,10 +48,38 @@ fun MainShell(
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                TabItem(Routes.CHATS, "Chats", Icons.AutoMirrored.Filled.Chat, current, tabs)
-                TabItem(Routes.TRANSACTIONS, "Transactions", Icons.Default.SwapVert, current, tabs)
-                TabItem(Routes.PROFILE, "Profile", Icons.Default.Person, current, tabs)
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                modifier = Modifier.border(
+                    width = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                ),
+            ) {
+                TabItem(
+                    route = Routes.CHATS,
+                    label = "Chats",
+                    selectedIcon = Icons.AutoMirrored.Filled.Chat,
+                    unselectedIcon = Icons.AutoMirrored.Outlined.Chat,
+                    current = current,
+                    controller = tabs,
+                )
+                TabItem(
+                    route = Routes.TRANSACTIONS,
+                    label = "Payments",
+                    selectedIcon = Icons.Default.AccountBalanceWallet,
+                    unselectedIcon = Icons.Outlined.AccountBalanceWallet,
+                    current = current,
+                    controller = tabs,
+                )
+                TabItem(
+                    route = Routes.PROFILE,
+                    label = "Settings",
+                    selectedIcon = Icons.Default.Person,
+                    unselectedIcon = Icons.Outlined.Person,
+                    current = current,
+                    controller = tabs,
+                )
             }
         },
     ) { inner ->
@@ -79,19 +109,20 @@ fun MainShell(
 }
 
 /**
- * One tab. The navigate options are what let a tab keep the place it was left
- * in: the state is saved on the way out and restored on the way back.
+ * WhatsApp styled navigation tab.
  */
 @Composable
 private fun RowScope.TabItem(
     route: String,
     label: String,
-    icon: ImageVector,
+    selectedIcon: ImageVector,
+    unselectedIcon: ImageVector,
     current: String?,
     controller: NavHostController,
 ) {
+    val selected = current == route
     NavigationBarItem(
-        selected = current == route,
+        selected = selected,
         onClick = {
             controller.navigate(route) {
                 popUpTo(controller.graph.startDestinationId) { saveState = true }
@@ -99,7 +130,24 @@ private fun RowScope.TabItem(
                 restoreState = true
             }
         },
-        icon = { Icon(icon, contentDescription = null) },
-        label = { Text(label) },
+        icon = {
+            Icon(
+                imageVector = if (selected) selectedIcon else unselectedIcon,
+                contentDescription = label,
+            )
+        },
+        label = {
+            Text(
+                text = label,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            )
+        },
+        colors = NavigationBarItemDefaults.colors(
+            selectedIconColor = MaterialTheme.colorScheme.primary,
+            selectedTextColor = MaterialTheme.colorScheme.primary,
+            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
     )
 }

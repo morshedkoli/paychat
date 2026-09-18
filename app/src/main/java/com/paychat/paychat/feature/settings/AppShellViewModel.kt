@@ -34,7 +34,19 @@ class AppShellViewModel @Inject constructor(
         initialValue = ThemeChoice.SYSTEM,
     )
 
+    val hideBalances: StateFlow<Boolean> = preferences.hideBalances.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = false,
+    )
+
     val locked: StateFlow<Boolean> = appLock.locked
+
+    fun toggleHideBalances() {
+        viewModelScope.launch {
+            preferences.setHideBalances(!hideBalances.value)
+        }
+    }
 
     init {
         // A launch is not a return from a detour: the phone may have been off
@@ -44,10 +56,21 @@ class AppShellViewModel @Inject constructor(
         viewModelScope.launch {
             preferences.appLockEnabled.collect { appLock.onSettingChanged(it) }
         }
+
+        // Apply default privacy mode on cold start
+        viewModelScope.launch {
+            if (preferences.alwaysHideBalancesOnLaunchNow()) {
+                preferences.setHideBalances(true)
+            }
+        }
     }
 
     fun onForeground() {
-        viewModelScope.launch { appLock.onForeground(preferences.appLockEnabledNow()) }
+        viewModelScope.launch {
+            val enabled = preferences.appLockEnabledNow()
+            val timeout = preferences.lockTimeoutNow()
+            appLock.onForeground(enabled = enabled, graceMs = timeout.millis)
+        }
     }
 
     fun onBackground() = appLock.onBackground()

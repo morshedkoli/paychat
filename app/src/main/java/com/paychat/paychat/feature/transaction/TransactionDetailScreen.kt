@@ -12,7 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -20,12 +20,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -67,7 +65,6 @@ fun TransactionDetailScreen(
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     val ledger = PayChatTheme.ledger
-    var showReversal by remember { mutableStateOf(false) }
     var showPhotoViewer by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.error) {
@@ -75,16 +72,6 @@ fun TransactionDetailScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.dismissError()
         }
-    }
-
-    if (showReversal) {
-        ReversalDialog(
-            onDismiss = { showReversal = false },
-            onConfirm = { note ->
-                showReversal = false
-                viewModel.reverse(note)
-            },
-        )
     }
 
     Scaffold(
@@ -113,75 +100,145 @@ fun TransactionDetailScreen(
                 .fillMaxSize()
                 .padding(inner)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = if (state.viewerIsPayer) "You gave" else "You received",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = Money(transaction.amountMinor).format(),
-                style = AmountLargeStyle,
-                color = when (transaction.status) {
-                    TxnStatus.PENDING -> ledger.pending
-                    TxnStatus.ACCEPTED ->
-                        if (state.viewerIsPayer) ledger.credit else ledger.debit
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-
-            HorizontalDivider()
-
-            DetailRow("Status", statusText(transaction.status, transaction.unconfirmed))
-            DetailRow("Recorded", Timestamps.daySeparator(transaction.createdAt))
-            transaction.resolvedAt?.let { DetailRow("Settled", Timestamps.daySeparator(it)) }
-            transaction.dueDate?.let { DetailRow("Due", Timestamps.daySeparator(it)) }
-
-            val parsedNote = remember(transaction.note) { TransactionNote.parse(transaction.note) }
-            if (parsedNote.category != TxnCategory.GENERAL) {
-                DetailRow("Category", parsedNote.category.displayName)
-            }
-            if (parsedNote.text.isNotBlank()) {
-                DetailRow("Note", parsedNote.text)
-            }
-            if (parsedNote.trxId != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+            // WhatsApp Pay Digital Receipt Card
+            androidx.compose.material3.Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+                border = androidx.compose.foundation.BorderStroke(
+                    0.5.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                ),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(
-                        "TrxID",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    // Status Badge Pill
+                    val isCompleted = transaction.status == TxnStatus.ACCEPTED
+                    val isPending = transaction.status == TxnStatus.PENDING
+                    val statusBg = when {
+                        isCompleted -> ledger.credit.copy(alpha = 0.15f)
+                        isPending -> ledger.pending.copy(alpha = 0.15f)
+                        else -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                    }
+                    val statusTextColor = when {
+                        isCompleted -> ledger.credit
+                        isPending -> ledger.pending
+                        else -> MaterialTheme.colorScheme.error
+                    }
+
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = statusBg,
                     ) {
                         Text(
-                            parsedNote.trxId,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = statusText(transaction.status, transaction.unconfirmed),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = statusTextColor,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                         )
-                        TextButton(onClick = {
-                            clipboardManager.setText(AnnotatedString(parsedNote.trxId))
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar("TrxID copied to clipboard")
+                    }
+
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(14.dp))
+
+                    // Amount
+                    Text(
+                        text = Money(transaction.amountMinor).format(),
+                        style = AmountLargeStyle,
+                        color = when (transaction.status) {
+                            TxnStatus.PENDING -> ledger.pending
+                            TxnStatus.ACCEPTED ->
+                                if (state.viewerIsPayer) ledger.credit else ledger.debit
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+
+                    Text(
+                        text = if (state.viewerIsPayer) "You sent / gave" else "You received",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(18.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(14.dp))
+
+                    // Receipt details
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        DetailRow("Date", Timestamps.daySeparator(transaction.createdAt))
+                        transaction.resolvedAt?.let { DetailRow("Settled", Timestamps.daySeparator(it)) }
+                        transaction.dueDate?.let { dueMillis ->
+                            val info = com.paychat.paychat.core.ledger.DueDateHelper.evaluate(dueMillis)
+                            DetailRow("Due Date", "${Timestamps.daySeparator(dueMillis)} (${info.label})")
+                        }
+
+                        val parsedNote = remember(transaction.note) { TransactionNote.parse(transaction.note) }
+                        if (parsedNote.category != TxnCategory.GENERAL) {
+                            DetailRow("Category", parsedNote.category.displayName)
+                        }
+                        if (parsedNote.text.isNotBlank()) {
+                            DetailRow("Note", parsedNote.text)
+                        }
+                        if (parsedNote.trxId != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "TrxID",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        parsedNote.trxId,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                    )
+                                    androidx.compose.material3.Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        modifier = Modifier.clickable {
+                                            clipboardManager.setText(AnnotatedString(parsedNote.trxId))
+                                            coroutineScope.launch {
+                                                snackbarHostState.showSnackbar("TrxID copied to clipboard")
+                                            }
+                                        },
+                                    ) {
+                                        Text(
+                                            "Copy",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                }
                             }
-                        }) {
-                            Text("Copy")
+                        }
+
+                        if (transaction.reversesId != null) {
+                            DetailRow("Type", "Correction of an earlier transaction")
+                        }
+                        if (transaction.reversedBy != null) {
+                            DetailRow("Type", "Corrected by a later transaction")
                         }
                     }
                 }
-            }
-
-            if (transaction.reversesId != null) {
-                DetailRow("Type", "Correction of an earlier transaction")
-            }
-            if (transaction.reversedBy != null) {
-                DetailRow("Type", "Corrected by a later transaction")
             }
 
             val photo = transaction.photoUrl ?: transaction.localPhotoPath?.let { File(it) }
@@ -194,55 +251,84 @@ fun TransactionDetailScreen(
                     )
                 }
 
-                AsyncImage(
-                    model = photo,
-                    contentDescription = "Receipt (tap to zoom)",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { showPhotoViewer = true },
-                )
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        0.5.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                    ),
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            "Receipt Image",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        AsyncImage(
+                            model = photo,
+                            contentDescription = "Receipt (tap to zoom)",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showPhotoViewer = true },
+                        )
+                    }
+                }
             }
 
-            HorizontalDivider()
-
+            // Actions in WhatsApp button style
             if (state.showDecisionActions) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.material3.Button(
                         onClick = viewModel::accept,
                         enabled = !state.working,
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Accept") }
-                    OutlinedButton(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                        ),
+                        modifier = Modifier.weight(1f).height(46.dp),
+                    ) { Text("Accept", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    androidx.compose.material3.OutlinedButton(
                         onClick = viewModel::reject,
                         enabled = !state.working,
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Reject") }
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.weight(1f).height(46.dp),
+                    ) { Text("Reject", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
                 }
             }
 
             if (state.canCancel) {
-                OutlinedButton(
+                androidx.compose.material3.OutlinedButton(
                     onClick = viewModel::cancel,
                     enabled = !state.working,
-                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
                 ) { Text("Cancel this request") }
             }
 
-            if (state.canReverse) {
-                OutlinedButton(
-                    onClick = { showReversal = true },
-                    enabled = !state.working,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Correct this") }
-                Text(
-                    "An accepted transaction is never edited or deleted. Correcting it adds " +
-                        "an opposite entry, so both of you can see what changed.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (state.canSendReminder) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = {
+                        viewModel.sendReminder { msg ->
+                            coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                        }
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                ) {
+                    Icon(
+                        Icons.Default.NotificationsActive,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Text("Send Friendly Reminder (তাগাদা)")
+                }
             }
         }
     }
@@ -274,33 +360,4 @@ private fun statusText(status: TxnStatus, unconfirmed: Boolean): String = when (
         if (unconfirmed) "Counted, not confirmed by them yet" else "Counted in the balance"
     TxnStatus.REJECTED -> "Rejected"
     TxnStatus.CANCELLED -> "Cancelled"
-}
-
-@Composable
-private fun ReversalDialog(onDismiss: () -> Unit, onConfirm: (String?) -> Unit) {
-    var note by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Correct this transaction") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "This adds an opposite entry for the same amount. The original stays in " +
-                        "the history, marked as corrected.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Why? (optional)") },
-                    singleLine = true,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(note.ifBlank { null }) }) { Text("Correct") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }

@@ -161,24 +161,27 @@ class ContactsRepository @Inject constructor(
         // second attempt never produces a duplicate conversation.
         threadDao.byPhone(e164)?.let { return@runCatching it.threadId }
 
-        val peerUid = findAccountByPhone(e164).getOrThrow()
+        // Check if we already have this contact resolved locally in Room
+        val cachedContact = deviceContactDao.byPhone(e164)
+        val peerUid = cachedContact?.linkedUid ?: findAccountByPhone(e164).getOrNull()
         val now = System.currentTimeMillis()
 
         if (peerUid != null) {
             val threadId = ThreadIds.direct(ownUid, peerUid)
-            val peer = firestore.collection(Collections.USERS).document(peerUid).get().await()
-            val peerName = peer.getString(UserFields.NAME).orEmpty().ifEmpty { name }
+            val peerUser = userDao.byUid(peerUid)
+            val peerName = peerUser?.name?.ifEmpty { null } ?: name
 
-            // Merged, not replaced: the other person may have created this
-            // thread first, and a plain set would wipe its last message.
-            firestore.collection(Collections.THREADS).document(threadId).set(
-                mapOf(
-                    ThreadFields.MEMBERS to listOf(ownUid, peerUid).sorted(),
-                    ThreadFields.IS_LOCAL to false,
-                    ThreadFields.UPDATED_AT to now,
-                ),
-                SetOptions.merge(),
-            ).await()
+            // Try to notify Firestore if online, but don't block offline
+            runCatching {
+                firestore.collection(Collections.THREADS).document(threadId).set(
+                    mapOf(
+                        ThreadFields.MEMBERS to listOf(ownUid, peerUid).sorted(),
+                        ThreadFields.IS_LOCAL to false,
+                        ThreadFields.UPDATED_AT to now,
+                    ),
+                    SetOptions.merge(),
+                )
+            }
 
             threadDao.upsert(
                 ThreadEntity(
@@ -186,7 +189,7 @@ class ContactsRepository @Inject constructor(
                     peerUid = peerUid,
                     peerPhone = e164,
                     peerName = peerName,
-                    peerPhotoUrl = peer.getString(UserFields.PHOTO_URL),
+                    peerPhotoUrl = peerUser?.photoUrl,
                     isLocal = false,
                     updatedAt = now,
                 )
@@ -196,30 +199,32 @@ class ContactsRepository @Inject constructor(
             val contactId = UUID.randomUUID().toString()
             val threadId = ThreadIds.local(ownUid, contactId)
 
-            firestore.runBatch { batch ->
-                batch.set(
-                    firestore.collection(Collections.USERS).document(ownUid)
-                        .collection(Collections.LOCAL_CONTACTS).document(contactId),
-                    mapOf(
-                        LocalContactFields.NAME to name,
-                        LocalContactFields.PHONE to e164,
-                        LocalContactFields.THREAD_ID to threadId,
-                        LocalContactFields.CREATED_AT to now,
-                    )
-                )
-                batch.set(
-                    firestore.collection(Collections.THREADS).document(threadId),
-                    mapOf(
-                        ThreadFields.MEMBERS to listOf(ownUid),
-                        ThreadFields.IS_LOCAL to true,
-                        ThreadFields.LOCAL_CONTACT to mapOf(
+            runCatching {
+                firestore.runBatch { batch ->
+                    batch.set(
+                        firestore.collection(Collections.USERS).document(ownUid)
+                            .collection(Collections.LOCAL_CONTACTS).document(contactId),
+                        mapOf(
                             LocalContactFields.NAME to name,
                             LocalContactFields.PHONE to e164,
-                        ),
-                        ThreadFields.UPDATED_AT to now,
+                            LocalContactFields.THREAD_ID to threadId,
+                            LocalContactFields.CREATED_AT to now,
+                        )
                     )
-                )
-            }.await()
+                    batch.set(
+                        firestore.collection(Collections.THREADS).document(threadId),
+                        mapOf(
+                            ThreadFields.MEMBERS to listOf(ownUid),
+                            ThreadFields.IS_LOCAL to true,
+                            ThreadFields.LOCAL_CONTACT to mapOf(
+                                LocalContactFields.NAME to name,
+                                LocalContactFields.PHONE to e164,
+                            ),
+                            ThreadFields.UPDATED_AT to now,
+                        )
+                    )
+                }
+            }
 
             localContactDao.upsert(
                 LocalContactEntity(

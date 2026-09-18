@@ -5,28 +5,38 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -34,20 +44,27 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.paychat.paychat.ui.theme.LocalHideBalances
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,14 +73,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.FilledTonalButton
 import com.paychat.paychat.core.model.TxnCategory
 import com.paychat.paychat.core.model.TxnDirection
 import com.paychat.paychat.data.moderation.ReportReason
@@ -88,9 +107,8 @@ fun ChatScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val playback = rememberVoicePlayback()
     val context = LocalContext.current
+    val ledger = PayChatTheme.ledger
 
-    // A push for the chat being read is suppressed, so the screen has to say
-    // when it is the one on top.
     LifecycleResumeEffect(Unit) {
         viewModel.screenResumed()
         onPauseOrDispose { viewModel.screenPaused() }
@@ -118,7 +136,6 @@ fun ChatScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted) viewModel.startRecording() }
 
-    // The list is reversed, so index 0 is the newest message.
     LaunchedEffect(state.messages.firstOrNull()?.messageId) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
@@ -137,8 +154,6 @@ fun ChatScreen(
         }
     }
 
-    // Leaving mid-recording throws the partial file away rather than sending
-    // whatever happened to be captured.
     DisposeRecording(recording = state.recordingMessageId != null, onCancel = viewModel::cancelRecording)
 
     if (showAttachments) {
@@ -174,31 +189,36 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onOpenLedger(state.threadId) },
+                    ) {
                         Avatar(
                             name = state.peerName,
                             key = state.peerPhone,
                             photoUrl = state.peerPhotoUrl,
-                            size = 36.dp,
+                            size = 38.dp,
                         )
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Text(state.peerName, style = MaterialTheme.typography.titleMedium)
-                            // At most one line under the name, in the order
-                            // that matters: a deleted account outranks a claim
-                            // to be typing, which outranks never having joined.
+                        Column(Modifier.padding(start = 10.dp)) {
+                            Text(
+                                text = state.peerName,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                ),
+                                maxLines = 1,
+                            )
                             val subtitle = when {
                                 state.peerDeparted -> "Account deleted"
                                 state.peerTyping -> "typing…"
                                 state.isLocal -> "Not on PayChat yet"
-                                else -> null
+                                else -> "tap for ledger"
                             }
-                            if (subtitle != null) {
-                                Text(
-                                    subtitle,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            Text(
+                                subtitle,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = if (state.peerTyping) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 },
@@ -208,6 +228,15 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    // Quick Payment / Transaction shortcut
+                    IconButton(onClick = { onAddTransaction(state.threadId, null, null, null, null) }) {
+                        Icon(
+                            Icons.Default.AccountBalanceWallet,
+                            contentDescription = "Transfer",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+
                     IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More")
                     }
@@ -231,9 +260,15 @@ fun ChatScreen(
                         }
 
                         DropdownMenuItem(
+                            text = { Text("View ledger") },
+                            onClick = {
+                                showMenu = false
+                                onOpenLedger(state.threadId)
+                            },
+                        )
+
+                        DropdownMenuItem(
                             text = { Text(if (state.blockedByMe) "Unblock" else "Block") },
-                            // Being blocked by the other person is not
-                            // something this side can undo.
                             enabled = !state.blockedByPeer,
                             onClick = {
                                 showMenu = false
@@ -250,12 +285,20 @@ fun ChatScreen(
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner).imePadding()) {
-
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .background(ledger.chatBackground)
+                .imePadding()
+        ) {
             val settleAction: (() -> Unit)? = if (!state.balance.isZero) {
                 {
                     val dir = if (state.balance.isNegative) TxnDirection.SENT.name else TxnDirection.RECEIVED.name
@@ -264,8 +307,9 @@ fun ChatScreen(
                 }
             } else null
 
+            val hideBalances = LocalHideBalances.current
             BalanceHeader(
-                balanceText = state.balance.formatSigned(),
+                balanceText = state.balance.formatSigned(hideBalances),
                 positive = state.balance.isPositive,
                 zero = state.balance.isZero,
                 onClick = { onOpenLedger(state.threadId) },
@@ -276,6 +320,7 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
                 reverseLayout = true,
+                contentPadding = PaddingValues(vertical = 8.dp),
             ) {
                 if (state.messages.isEmpty()) {
                     item {
@@ -283,11 +328,9 @@ fun ChatScreen(
                             icon = Icons.Default.Payments,
                             title = "No messages yet",
                             body = if (state.isLocal) {
-                                state.peerName + " is not on PayChat yet. You can " +
-                                    "still record money, and it follows them here " +
-                                    "when they join."
+                                state.peerName + " is not on PayChat yet. You can still record transactions."
                             } else {
-                                "Say hello, or record money with the plus button."
+                                "Say hello or record money with the payment button."
                             },
                         )
                     }
@@ -309,17 +352,15 @@ fun ChatScreen(
                             message = message,
                             viewerUid = state.viewerUid,
                             playback = playback,
+                            onReply = viewModel::startReply,
                         )
                     }
                 }
             }
 
-            HorizontalDivider()
-
             if (state.peerDeparted) {
                 ClosedNotice(
-                    state.peerName + " has deleted their account. " +
-                        "The conversation and its balance are kept."
+                    state.peerName + " has deleted their account. The conversation and its balance are kept."
                 )
             } else if (state.blocked) {
                 BlockedNotice(
@@ -330,6 +371,8 @@ fun ChatScreen(
             } else {
                 Composer(
                     draft = state.draft,
+                    replyingTo = state.replyingTo,
+                    onCancelReply = viewModel::cancelReply,
                     canSend = state.canSend,
                     recording = state.recordingMessageId != null,
                     onDraftChange = viewModel::onDraftChange,
@@ -338,6 +381,7 @@ fun ChatScreen(
                     onStartRecording = { requestAudio.launch(Manifest.permission.RECORD_AUDIO) },
                     onStopRecording = viewModel::stopRecording,
                     onCancelRecording = viewModel::cancelRecording,
+                    onQuickTransaction = { onAddTransaction(state.threadId, null, null, null, null) },
                 )
             }
         }
@@ -349,8 +393,7 @@ fun ChatScreen(
             title = { Text("Block " + state.peerName + "?") },
             text = {
                 Text(
-                    "Neither of you can send messages or record money in this " +
-                        "conversation. What is already recorded stays exactly as it is."
+                    "Neither of you can send messages or record money in this conversation. What is already recorded stays exactly as it is."
                 )
             },
             confirmButton = {
@@ -379,17 +422,13 @@ fun ChatScreen(
     }
 }
 
-/**
- * Replaces the composer while the conversation is closed.
- *
- * The history above it stays exactly where it was: blocking someone settles
- * nothing, and hiding what is owed would be the one thing this app must not
- * do.
- */
 @Composable
 private fun BlockedNotice(blockedByMe: Boolean, peerName: String, onUnblock: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .navigationBarsPadding(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -408,7 +447,6 @@ private fun BlockedNotice(blockedByMe: Boolean, peerName: String, onUnblock: () 
     }
 }
 
-/** Where the composer would be, when there is nobody left to send to. */
 @Composable
 private fun ClosedNotice(text: String) {
     Text(
@@ -459,28 +497,63 @@ private fun AttachmentSheet(
     onCamera: () -> Unit,
     onTransaction: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        ListItem(
-            headlineContent = { Text("Photo from gallery") },
-            leadingContent = { Icon(Icons.Default.Image, contentDescription = null) },
-            modifier = Modifier.clickableRow(onGallery),
-        )
-        ListItem(
-            headlineContent = { Text("Take a photo") },
-            leadingContent = { Icon(Icons.Default.CameraAlt, contentDescription = null) },
-            modifier = Modifier.clickableRow(onCamera),
-        )
-        ListItem(
-            headlineContent = { Text("Record a transaction") },
-            leadingContent = { Icon(Icons.Default.Payments, contentDescription = null) },
-            modifier = Modifier.clickableRow(onTransaction),
-        )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            ListItem(
+                headlineContent = { Text("Photo Gallery") },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF9C27B0)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null, tint = Color.White)
+                    }
+                },
+                modifier = Modifier.clickable(onClick = onGallery),
+            )
+            ListItem(
+                headlineContent = { Text("Camera") },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE91E63)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White)
+                    }
+                },
+                modifier = Modifier.clickable(onClick = onCamera),
+            )
+            ListItem(
+                headlineContent = { Text("Send / Request Money") },
+                leadingContent = {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Payments, contentDescription = null, tint = Color.White)
+                    }
+                },
+                modifier = Modifier.clickable(onClick = onTransaction),
+            )
+        }
     }
 }
 
-private fun Modifier.clickableRow(onClick: () -> Unit) = this.clickable(onClick = onClick)
-
-
+/**
+ * WhatsApp-style slim interactive balance bar.
+ */
 @Composable
 private fun BalanceHeader(
     balanceText: String,
@@ -492,54 +565,82 @@ private fun BalanceHeader(
     val ledger = PayChatTheme.ledger
 
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            ),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = when {
-                    zero -> "Settled up"
-                    positive -> "They owe you"
-                    else -> "You owe them"
-                },
-                style = MaterialTheme.typography.labelLarge,
-            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
+                    text = when {
+                        zero -> "Settled up"
+                        positive -> "They owe you:"
+                        else -> "You owe them:"
+                    },
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
                     text = balanceText,
-                    style = AmountStyle,
+                    style = AmountStyle.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
                     color = when {
                         zero -> MaterialTheme.colorScheme.onSurfaceVariant
                         positive -> ledger.credit
                         else -> ledger.debit
                     },
                 )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 if (!zero && onSettle != null) {
                     FilledTonalButton(
                         onClick = onSettle,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
                     ) {
                         Text("Settle", style = MaterialTheme.typography.labelSmall)
                     }
                 }
-                TextButton(onClick = onClick) {
-                    Text("Ledger", style = MaterialTheme.typography.labelSmall)
+                TextButton(
+                    onClick = onClick,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        "Ledger",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * WhatsApp signature floating composer layout:
+ * - Rounded pill container on the left with emoji, attachment, text input, and quick pay.
+ * - Independent circular action button on the right for Send / Voice.
+ */
 @Composable
 private fun Composer(
     draft: String,
+    replyingTo: QuotedMessage? = null,
+    onCancelReply: () -> Unit = {},
     canSend: Boolean,
     recording: Boolean,
     onDraftChange: (String) -> Unit,
@@ -548,49 +649,183 @@ private fun Composer(
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
     onCancelRecording: () -> Unit,
+    onQuickTransaction: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 2.dp),
     ) {
-        if (recording) {
-            IconButton(onClick = onCancelRecording) {
-                Icon(Icons.Default.Close, contentDescription = "Discard recording")
+        if (replyingTo != null) {
+            Surface(
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Replying to ${replyingTo.authorName}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = replyingTo.textSnippet,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                    IconButton(onClick = onCancelReply, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cancel reply",
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
             }
-            Text(
-                "Recording…",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.weight(1f).padding(bottom = 14.dp),
-            )
-            FilledIconButton(onClick = onStopRecording, modifier = Modifier.size(48.dp)) {
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+        if (recording) {
+            Surface(
+                modifier = Modifier.weight(1f).height(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onCancelRecording) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Discard recording",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Text(
+                        "Recording voice note…",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            FilledIconButton(
+                onClick = onStopRecording,
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+                modifier = Modifier.size(48.dp),
+            ) {
                 Icon(Icons.Default.Stop, contentDescription = "Send recording")
             }
             return@Row
         }
 
-        IconButton(onClick = onAttach) {
-            Icon(Icons.Default.Add, contentDescription = "Attach")
-        }
-        OutlinedTextField(
-            value = draft,
-            onValueChange = onDraftChange,
+        // Left Pill Input Box
+        Surface(
             modifier = Modifier.weight(1f),
-            placeholder = { Text("Message") },
-            maxLines = 5,
-        )
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                width = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            ),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onAttach, modifier = Modifier.size(38.dp)) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Attach",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                TextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            "Message",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        )
+                    },
+                    maxLines = 5,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                    ),
+                )
+
+                if (draft.isBlank()) {
+                    IconButton(onClick = onQuickTransaction, modifier = Modifier.size(38.dp)) {
+                        Icon(
+                            Icons.Default.Payments,
+                            contentDescription = "Pay",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Right Circular Floating Action Button
         FilledIconButton(
             onClick = if (canSend) onSend else onStartRecording,
+            shape = CircleShape,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
             modifier = Modifier.size(48.dp),
         ) {
             Icon(
                 imageVector = if (canSend) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
                 contentDescription = if (canSend) "Send" else "Record a voice message",
+                modifier = Modifier.size(22.dp),
             )
         }
     }
 }
+}
+
+
+

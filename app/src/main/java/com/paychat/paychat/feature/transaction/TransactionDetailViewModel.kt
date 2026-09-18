@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.paychat.paychat.core.errors.userMessage
 import com.paychat.paychat.core.ledger.BalanceCalculator
 import com.paychat.paychat.core.ledger.TransactionRules
+import com.paychat.paychat.core.model.TxnStatus
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.transactions.TransactionRepository
+import com.paychat.paychat.ui.components.Timestamps
 import com.paychat.paychat.ui.nav.NavArgs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,14 +40,14 @@ data class TransactionDetailUiState(
             TransactionRules.canCancel(it.status, it.createdBy, viewerUid)
         } ?: false
 
-    val canReverse: Boolean
-        get() = transaction?.let {
-            TransactionRules.canReverse(it.status, it.reversedBy != null, it.unconfirmed)
-        } ?: false
-
     val canReviewInherited: Boolean
         get() = transaction?.let {
             TransactionRules.canReviewInherited(it.unconfirmed, it.createdBy, viewerUid)
+        } ?: false
+
+    val canSendReminder: Boolean
+        get() = transaction?.let {
+            it.status == TxnStatus.ACCEPTED || (it.status == TxnStatus.PENDING && it.createdBy == viewerUid)
         } ?: false
 
     val showDecisionActions: Boolean
@@ -56,6 +58,7 @@ data class TransactionDetailUiState(
 class TransactionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val transactions: TransactionRepository,
+    private val chat: com.paychat.paychat.data.chat.ChatRepository,
     auth: AuthRepository,
 ) : ViewModel() {
 
@@ -94,8 +97,20 @@ class TransactionDetailViewModel @Inject constructor(
 
     fun cancel() = act { transactions.cancel(txnId) }
 
-    /** Corrects an accepted transaction with an opposite entry. */
-    fun reverse(note: String?) = act { transactions.reverse(txnId, note).map { } }
+    fun sendReminder(onResult: (String) -> Unit) {
+        val txn = _state.value.transaction ?: return
+        val amountStr = com.paychat.paychat.core.money.Money(txn.amountMinor).format()
+        val noteText = txn.note?.takeIf { it.isNotBlank() }?.let { " for '$it'" }.orEmpty()
+        val dueText = txn.dueDate?.let { " (Due: ${Timestamps.daySeparator(it)})" }.orEmpty()
+        val reminderMsg = "Friendly reminder regarding: $amountStr$noteText$dueText. Please settle up when convenient! 😊"
+
+        viewModelScope.launch {
+            chat.sendText(txn.threadId, reminderMsg).fold(
+                onSuccess = { onResult("Reminder sent in chat") },
+                onFailure = { onResult("Failed to send reminder") },
+            )
+        }
+    }
 
     private fun act(block: suspend () -> Result<Unit>) {
         if (_state.value.working) return

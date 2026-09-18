@@ -12,7 +12,6 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,36 +23,37 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.paychat.paychat.ui.theme.WhatsAppForestGreen
+import com.paychat.paychat.ui.theme.WhatsAppTealGreen
 
 /**
- * The corner radius every text field in the app shares.
- *
- * Deliberately between the 24dp of the cards fields sit inside and the fully
- * rounded primary button below them, so the three read as one family instead
- * of three unrelated shapes stacked up.
+ * WhatsApp-style clean corner radius for text fields.
  */
-internal val FieldShape = RoundedCornerShape(14.dp)
+internal val FieldShape = RoundedCornerShape(12.dp)
+internal val ButtonShape = RoundedCornerShape(26.dp)
 
-/**
- * The colours every text field in the app shares.
- *
- * A tinted container is what separates an input from the card behind it; the
- * default hairline outline alone disappears against white.
- */
 @Composable
 internal fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-    errorContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    focusedContainerColor = MaterialTheme.colorScheme.surface,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+    errorContainerColor = MaterialTheme.colorScheme.surface,
     focusedBorderColor = MaterialTheme.colorScheme.primary,
-    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    cursorColor = MaterialTheme.colorScheme.primary,
 )
 
 @Composable
@@ -92,6 +92,7 @@ fun PasswordField(
                 Icon(
                     imageVector = if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                     contentDescription = if (visible) "Hide password" else "Show password",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
@@ -111,6 +112,7 @@ fun NameField(
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         label = { Text("Your name") },
+        placeholder = { Text("Type your name here") },
         singleLine = true,
         enabled = enabled,
         isError = error != null,
@@ -136,13 +138,22 @@ fun OtpField(
         value = value,
         onValueChange = { onValueChange(it.filter(Char::isDigit).take(6)) },
         modifier = modifier.fillMaxWidth(),
-        label = { Text("6 digit code") },
+        label = { Text("6-Digit Code", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+        placeholder = { Text("• • •  • • •", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
         singleLine = true,
         enabled = enabled,
         isError = error != null,
-        supportingText = error?.let { { Text(it) } },
+        supportingText = error?.let { { Text(it, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) } },
         shape = FieldShape,
         colors = fieldColors(),
+        textStyle = TextStyle(
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 10.sp,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface,
+        ),
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.NumberPassword,
             imeAction = ImeAction.Done,
@@ -160,33 +171,41 @@ fun PrimaryButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().height(52.dp),
+        modifier = modifier.fillMaxWidth().height(50.dp),
         enabled = enabled && !loading,
-        // A button that is busy still has to look like a button. The default
-        // disabled fill is nearly invisible on the signed-out backdrop, so
-        // waiting looked like the button had vanished.
+        shape = ButtonShape,
         colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             disabledContainerColor = MaterialTheme.colorScheme.primary.copy(
-                alpha = if (loading) 0.75f else 0.35f
+                alpha = if (loading) 0.8f else 0.35f
             ),
             disabledContentColor = MaterialTheme.colorScheme.onPrimary.copy(
-                alpha = if (loading) 1f else 0.6f
+                alpha = if (loading) 1f else 0.5f
             ),
         ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp, pressedElevation = 3.dp),
     ) {
         if (loading) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.height(20.dp),
-                    strokeWidth = 2.dp,
+                PayChatSpinner(
+                    size = 20.dp,
+                    strokeWidth = 2.2.dp,
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
-                Text(text)
+                Text(
+                    text,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
             }
         } else {
-            Text(text, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            )
         }
     }
 }
@@ -198,6 +217,7 @@ fun FormError(message: String?, modifier: Modifier = Modifier) {
         text = message,
         color = MaterialTheme.colorScheme.error,
         style = MaterialTheme.typography.bodyMedium,
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+        textAlign = TextAlign.Center,
+        modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
     )
 }

@@ -4,19 +4,8 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.paychat.paychat.core.model.MessageType
-import com.paychat.paychat.core.model.SyncState
-import com.paychat.paychat.data.chat.ChatRepository
-import com.paychat.paychat.data.local.dao.MessageDao
-import com.paychat.paychat.data.local.dao.TransactionDao
-import com.paychat.paychat.data.local.entity.MessageEntity
-import com.paychat.paychat.data.local.entity.TransactionEntity
-import com.paychat.paychat.data.media.MediaFiles
-import com.paychat.paychat.data.media.MediaUploader
-import com.paychat.paychat.data.transactions.TransactionRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import java.io.File
 
 /**
  * Uploads everything the user created while the app could not reach the
@@ -30,113 +19,11 @@ import java.io.File
 class OutboxWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
-    private val messageDao: MessageDao,
-    private val transactionDao: TransactionDao,
-    private val chatRepository: ChatRepository,
-    private val transactionRepository: TransactionRepository,
-    private val mediaUploader: MediaUploader,
-    private val mediaFiles: MediaFiles,
+    private val outboxSyncer: OutboxSyncer,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val waiting = listOf(SyncState.PENDING, SyncState.FAILED)
-
-        // Transactions go first. A message of type TXN is only a pointer at
-        // one, so uploading the message first would briefly show the other
-        // person a transaction that cannot be loaded.
-        var anyFailed = uploadTransactions(transactionDao.awaitingSync(waiting))
-        anyFailed = uploadMessages(messageDao.awaitingSync(waiting)) || anyFailed
-
-        // Retrying is WorkManager's job; it applies the backoff configured by
-        // the scheduler rather than us looping here.
-        return if (anyFailed) Result.retry() else Result.success()
-    }
-
-    private suspend fun uploadTransactions(pending: List<TransactionEntity>): Boolean {
-        var anyFailed = false
-        for (transaction in pending) {
-            transactionDao.setSyncState(transaction.txnId, SyncState.UPLOADING)
-            runCatching { send(transaction) }.fold(
-                onSuccess = { transactionDao.setSyncState(transaction.txnId, SyncState.SYNCED) },
-                onFailure = {
-                    transactionDao.setSyncState(transaction.txnId, SyncState.FAILED)
-                    anyFailed = true
-                },
-            )
-        }
-        return anyFailed
-    }
-
-    private suspend fun uploadMessages(pending: List<MessageEntity>): Boolean {
-        var anyFailed = false
-        for (message in pending) {
-            messageDao.setSyncState(message.messageId, SyncState.UPLOADING)
-            runCatching { send(message) }.fold(
-                onSuccess = { messageDao.setSyncState(message.messageId, SyncState.SYNCED) },
-                onFailure = {
-                    messageDao.setSyncState(message.messageId, SyncState.FAILED)
-                    anyFailed = true
-                },
-            )
-        }
-        return anyFailed
-    }
-
-    /** A receipt photo follows the same order as a chat attachment. */
-    private suspend fun send(transaction: TransactionEntity) {
-        var toSend = transaction
-
-        if (transaction.photoUrl == null && !transaction.localPhotoPath.isNullOrEmpty()) {
-            val localPath = transaction.localPhotoPath
-            val uploaded = mediaUploader.upload(
-                file = File(localPath),
-                messageId = transaction.txnId,
-                isVoice = false,
-            ).getOrThrow()
-
-            transactionDao.setPhoto(transaction.txnId, uploaded.secureUrl, uploaded.publicId)
-            toSend = transaction.copy(
-                photoUrl = uploaded.secureUrl,
-                photoPublicId = uploaded.publicId,
-                localPhotoPath = null,
-            )
-            mediaFiles.discard(localPath)
-        }
-
-        transactionRepository.upload(toSend)
-    }
-
-    /**
-     * An attachment is uploaded before the message document, so a message is
-     * never visible to the other person pointing at a file that is not there
-     * yet. The uploaded URL is stored first, so a retry after the document
-     * write failed does not upload the file a second time.
-     */
-    private suspend fun send(message: MessageEntity) {
-        var toSend = message
-
-        if (message.needsMediaUpload()) {
-            val localPath = message.localMediaPath ?: error("attachment has no local file")
-            val uploaded = mediaUploader.upload(
-                file = File(localPath),
-                messageId = message.messageId,
-                isVoice = message.type == MessageType.VOICE,
-            ).getOrThrow()
-
-            messageDao.setMedia(message.messageId, uploaded.secureUrl, uploaded.publicId)
-            toSend = message.copy(
-                mediaUrl = uploaded.secureUrl,
-                mediaPublicId = uploaded.publicId,
-                localMediaPath = null,
-            )
-            mediaFiles.discard(localPath)
-        }
-
-        chatRepository.upload(toSend)
+        val success = outboxSyncer.syncAll()
+        return if (success) Result.success() else Result.retry()
     }
 }
-
-private fun MessageEntity.needsMediaUpload(): Boolean =
-    (type == MessageType.IMAGE || type == MessageType.VOICE) &&
-        mediaUrl == null &&
-        !localMediaPath.isNullOrEmpty()

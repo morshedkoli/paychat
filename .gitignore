@@ -19,3 +19,8 @@ local.properties
 
 # Superpowers brainstorm scratch
 .superpowers/
+
+# Local dumps and screenshots
+phone_screen.png
+window_dump.xml
+users.json

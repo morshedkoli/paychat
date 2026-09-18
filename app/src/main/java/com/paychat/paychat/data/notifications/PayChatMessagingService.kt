@@ -9,6 +9,9 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.paychat.paychat.MainActivity
 import com.paychat.paychat.R
+import com.paychat.paychat.data.chat.ChatRepository
+import com.paychat.paychat.data.chat.ThreadsRepository
+import com.paychat.paychat.data.transactions.TransactionRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,9 @@ class PayChatMessagingService : FirebaseMessagingService() {
 
     @Inject lateinit var pushTokens: PushTokens
     @Inject lateinit var visibleThread: VisibleThread
+    @Inject lateinit var chat: ChatRepository
+    @Inject lateinit var threads: ThreadsRepository
+    @Inject lateinit var transactions: TransactionRepository
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -42,6 +48,20 @@ class PayChatMessagingService : FirebaseMessagingService() {
         val title = data[KEY_TITLE].orEmpty()
         val body = data[KEY_BODY].orEmpty()
         val channel = data[KEY_CHANNEL] ?: getString(R.string.channel_messages)
+
+        // The push is the moment the message reaches this device, so it is
+        // also the moment delivery can honestly be reported, and the only
+        // chance to bring the conversation into Room while no screen holds a
+        // listener. Both happen whether or not a notification is shown.
+        scope.launch {
+            threads.refreshThread(threadId)
+            chat.fetchRecent(threadId)
+            // A transaction push is most often somebody accepting or
+            // rejecting, which is a change to a row this device already holds
+            // and no listener is watching.
+            transactions.fetchThread(threadId)
+            chat.ackDelivery(threadId)
+        }
 
         // Nothing is more irritating than being notified about the
         // conversation you are already reading.

@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -77,7 +78,7 @@ class ChatRepository @Inject constructor(
         )
         messageDao.insert(message)
         threadDao.setLastMessage(threadId, MessageMapper.preview(MessageType.TEXT, body), now)
-        outbox.schedule()
+        outbox.scheduleAndFlush()
     }
 
     /**
@@ -113,7 +114,7 @@ class ChatRepository @Inject constructor(
         )
         messageDao.insert(message)
         threadDao.setLastMessage(threadId, MessageMapper.preview(type, null), now)
-        outbox.schedule()
+        outbox.scheduleAndFlush()
     }
 
     // ------------------------------------------------------------- typing
@@ -179,18 +180,29 @@ class ChatRepository @Inject constructor(
             if (lastTypingWriteAt.remove(threadId) == null) return
         }
 
-        // Failure is ignored on purpose. A typing indicator that could raise
-        // an error banner would be worse than one that quietly does not show.
+        // Fire and forget so offline presence writes never block the sender.
         runCatching {
             firestore.collection(Collections.THREADS).document(threadId).set(
                 mapOf(ThreadFields.TYPING to mapOf(viewerUid to if (typing) now else 0L)),
                 SetOptions.merge(),
-            ).await()
+            )
         }
     }
 
-    /** Uploads one queued message. Called by the outbox worker. */
+    /** Uploads one queued message. Called by the outbox syncer. */
     suspend fun upload(message: MessageEntity) {
+        val thread = threadDao.byId(message.threadId)
+        if (thread != null && !thread.isLocal && thread.peerUid != null) {
+            val members = listOf(message.senderId, thread.peerUid).sorted()
+            firestore.collection(Collections.THREADS).document(message.threadId).set(
+                mapOf(
+                    ThreadFields.MEMBERS to members,
+                    ThreadFields.IS_LOCAL to false,
+                ),
+                SetOptions.merge(),
+            ).await()
+        }
+
         val document = firestore.collection(Collections.THREADS)
             .document(message.threadId)
             .collection(Collections.MESSAGES)
@@ -261,6 +273,73 @@ class ChatRepository @Inject constructor(
     }
 
     /**
+     * Pulls a conversation's recent messages once, without holding a listener.
+     *
+     * A push is the only thing that wakes a backgrounded app, and the screens
+     * that hold the listeners may never have been opened. Without this the
+     * conversation list would still show the state it had when the app was
+     * last looked at.
+     */
+    suspend fun fetchRecent(threadId: String): Result<Unit> = runCatching {
+        val viewerUid = auth.currentUid ?: return@runCatching
+        val snapshot = messagesOf(threadId)
+            .orderBy(MessageFields.CREATED_AT, Query.Direction.DESCENDING)
+            .limit(MESSAGE_PAGE_SIZE)
+            .get()
+            .await()
+
+        persist(
+            snapshot.documents.map { MessageMapper.toEntity(it.toRemote(threadId), viewerUid) }
+        )
+    }
+
+    /**
+     * Confirms receipt of everything the other person has sent that this
+     * device has not confirmed yet.
+     *
+     * Delivery is not the same event as reading: it happens when the message
+     * reaches the device, which is when the push arrives, whereas
+     * [markRead] happens when the conversation is opened. Writing both at
+     * once would mean the second tick never appeared on its own.
+     */
+    suspend fun ackDelivery(threadId: String): Result<Unit> = runCatching {
+        val viewerUid = auth.currentUid ?: return@runCatching
+        val snapshot = messagesOf(threadId)
+            .orderBy(MessageFields.CREATED_AT, Query.Direction.DESCENDING)
+            .limit(MESSAGE_PAGE_SIZE)
+            .get()
+            .await()
+
+        val undelivered = snapshot.documents.filter { document ->
+            val deliveredTo = (document.get(MessageFields.DELIVERED_TO) as? List<*>)
+                ?.filterIsInstance<String>()
+                .orEmpty()
+            document.getString(MessageFields.SENDER_ID) != viewerUid &&
+                viewerUid !in deliveredTo
+        }
+        if (undelivered.isEmpty()) return@runCatching
+
+        runCatching {
+            withTimeout(5_000) {
+                firestore.runBatch { batch ->
+                    undelivered.forEach { document ->
+                        batch.update(
+                            document.reference,
+                            MessageFields.DELIVERED_TO,
+                            FieldValue.arrayUnion(viewerUid),
+                        )
+                    }
+                }.await()
+            }
+        }
+    }
+
+    private fun messagesOf(threadId: String) =
+        firestore.collection(Collections.THREADS)
+            .document(threadId)
+            .collection(Collections.MESSAGES)
+
+    /**
      * Marks every message in the thread that the user has not read yet.
      *
      * Read receipts are the only field a non-sender may change on a message,
@@ -276,17 +355,21 @@ class ChatRepository @Inject constructor(
         val collection = firestore.collection(Collections.THREADS)
             .document(threadId)
             .collection(Collections.MESSAGES)
-        firestore.runBatch { batch ->
-            unread.forEach { message ->
-                batch.update(
-                    collection.document(message.messageId),
-                    mapOf(
-                        MessageFields.READ_BY to FieldValue.arrayUnion(viewerUid),
-                        MessageFields.DELIVERED_TO to FieldValue.arrayUnion(viewerUid),
-                    ),
-                )
+        runCatching {
+            withTimeout(5_000) {
+                firestore.runBatch { batch ->
+                    unread.forEach { message ->
+                        batch.update(
+                            collection.document(message.messageId),
+                            mapOf(
+                                MessageFields.READ_BY to FieldValue.arrayUnion(viewerUid),
+                                MessageFields.DELIVERED_TO to FieldValue.arrayUnion(viewerUid),
+                            ),
+                        )
+                    }
+                }.await()
             }
-        }.await()
+        }
     }
 
     /** When this user last claimed to be typing, per conversation. */

@@ -17,6 +17,20 @@ import javax.inject.Singleton
 /** Which colours the app draws in. */
 enum class ThemeChoice { SYSTEM, LIGHT, DARK }
 
+/** Grace period after leaving the app before screen lock is required. */
+enum class LockTimeout(val millis: Long, val label: String) {
+    IMMEDIATELY(0L, "Immediately"),
+    THIRTY_SECONDS(30_000L, "30s"),
+    ONE_MINUTE(60_000L, "1 min"),
+    FIVE_MINUTES(300_000L, "5 min");
+
+    companion object {
+        val DEFAULT = THIRTY_SECONDS
+        fun fromName(name: String?): LockTimeout =
+            entries.find { it.name.equals(name, ignoreCase = true) } ?: DEFAULT
+    }
+}
+
 /**
  * Settings that belong to this device rather than to the account.
  *
@@ -34,6 +48,9 @@ class AppPreferences @Inject constructor(
     private object Keys {
         val THEME = stringPreferencesKey("theme")
         val APP_LOCK = booleanPreferencesKey("appLock")
+        val LOCK_TIMEOUT = stringPreferencesKey("lockTimeout")
+        val HIDE_BALANCES = booleanPreferencesKey("hideBalances")
+        val ALWAYS_HIDE_BALANCES_ON_LAUNCH = booleanPreferencesKey("alwaysHideBalancesOnLaunch")
     }
 
     val theme: Flow<ThemeChoice> = context.dataStore.data.map { prefs ->
@@ -45,7 +62,21 @@ class AppPreferences @Inject constructor(
 
     val appLockEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.APP_LOCK] ?: false }
 
+    val lockTimeout: Flow<LockTimeout> = context.dataStore.data.map { prefs ->
+        LockTimeout.fromName(prefs[Keys.LOCK_TIMEOUT])
+    }
+
+    val hideBalances: Flow<Boolean> = context.dataStore.data.map { it[Keys.HIDE_BALANCES] ?: false }
+
+    val alwaysHideBalancesOnLaunch: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.ALWAYS_HIDE_BALANCES_ON_LAUNCH] ?: false
+    }
+
     suspend fun appLockEnabledNow(): Boolean = appLockEnabled.first()
+
+    suspend fun lockTimeoutNow(): LockTimeout = lockTimeout.first()
+
+    suspend fun alwaysHideBalancesOnLaunchNow(): Boolean = alwaysHideBalancesOnLaunch.first()
 
     suspend fun setTheme(choice: ThemeChoice) {
         context.dataStore.edit { it[Keys.THEME] = choice.name }
@@ -54,4 +85,17 @@ class AppPreferences @Inject constructor(
     suspend fun setAppLockEnabled(enabled: Boolean) {
         context.dataStore.edit { it[Keys.APP_LOCK] = enabled }
     }
+
+    suspend fun setLockTimeout(timeout: LockTimeout) {
+        context.dataStore.edit { it[Keys.LOCK_TIMEOUT] = timeout.name }
+    }
+
+    suspend fun setHideBalances(hide: Boolean) {
+        context.dataStore.edit { it[Keys.HIDE_BALANCES] = hide }
+    }
+
+    suspend fun setAlwaysHideBalancesOnLaunch(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ALWAYS_HIDE_BALANCES_ON_LAUNCH] = enabled }
+    }
 }
+

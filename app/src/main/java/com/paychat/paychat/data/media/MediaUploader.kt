@@ -92,7 +92,17 @@ class MediaUploader @Inject constructor(
             client.newCall(request).execute().use { response ->
                 val payload = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    error("Cloudinary rejected the upload: ${response.code}")
+                    // Cloudinary explains itself in the body — "Invalid
+                    // Signature", "Invalid API key" and so on. The status code
+                    // alone is the same 401 for every one of them, so the
+                    // reason is carried through rather than dropped.
+                    val reason = runCatching {
+                        JSONObject(payload).getJSONObject("error").getString("message")
+                    }.getOrNull()
+                    error(
+                        "Cloudinary rejected the upload: ${response.code}" +
+                            (reason?.let { " ($it)" } ?: "")
+                    )
                 }
                 val json = JSONObject(payload)
                 UploadedMedia(

@@ -9,6 +9,7 @@ import com.paychat.paychat.core.model.MessageType
 import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.data.auth.AuthRepository
 import com.paychat.paychat.data.chat.ChatRepository
+import com.paychat.paychat.data.chat.ThreadsRepository
 import com.paychat.paychat.data.local.entity.MessageEntity
 import com.paychat.paychat.data.local.entity.TransactionEntity
 import com.paychat.paychat.data.media.MediaFiles
@@ -48,6 +49,7 @@ data class ChatUiState(
     /** The transaction each TXN message points at, keyed by its id. */
     val transactions: Map<String, TransactionEntity> = emptyMap(),
     val draft: String = "",
+    val replyingTo: QuotedMessage? = null,
     /** Set while a voice message is being recorded. */
     val recordingMessageId: String? = null,
     val error: String? = null,
@@ -70,6 +72,7 @@ class ChatViewModel @Inject constructor(
     private val mediaFiles: MediaFiles,
     private val voiceRecorder: VoiceRecorder,
     private val transactions: TransactionRepository,
+    private val threads: ThreadsRepository,
     private val visibleThread: VisibleThread,
     private val moderation: ModerationRepository,
     auth: AuthRepository,
@@ -134,6 +137,11 @@ class ChatViewModel @Inject constructor(
                 transactions.persist(threadId, incoming)
             }
         }
+
+        // Opening a conversation is when the other person's picture and name
+        // are looked at, so they are read once here rather than being left at
+        // whatever was cached when the thread first appeared.
+        viewModelScope.launch { threads.refreshPeer(threadId) }
     }
 
     // ------------------------------------------------------- notifications
@@ -204,20 +212,40 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { chat.setTyping(threadId, value.isNotBlank()) }
     }
 
+    fun startReply(quote: QuotedMessage) {
+        _state.update { it.copy(replyingTo = quote) }
+    }
+
+    fun cancelReply() {
+        _state.update { it.copy(replyingTo = null) }
+    }
+
     fun send() {
-        val body = _state.value.draft
-        if (body.isBlank()) return
+        val rawDraft = _state.value.draft
+        if (rawDraft.isBlank()) return
+
+        val reply = _state.value.replyingTo
+        val body = if (reply != null) {
+            QuotedMessageCodec.encode(reply.authorName, reply.textSnippet, rawDraft)
+        } else {
+            rawDraft
+        }
 
         // Cleared before the send completes: the message is written to the
         // local database first, so it appears immediately either way.
-        _state.update { it.copy(draft = "") }
+        _state.update { it.copy(draft = "", replyingTo = null) }
 
+        // Withdraw typing indicator asynchronously without delaying message send
         viewModelScope.launch {
             chat.setTyping(threadId, false)
+        }
+
+        viewModelScope.launch {
             chat.sendText(threadId, body).onFailure { error ->
                 _state.update {
                     it.copy(
-                        draft = body,
+                        draft = rawDraft,
+                        replyingTo = reply,
                         error = error.userMessage("Could not send that message."),
                     )
                 }

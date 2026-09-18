@@ -39,10 +39,14 @@ class AppLock @Inject constructor() {
      * @return true when the app should be covered, which the caller uses to
      *   decide whether to ask for the screen lock
      */
-    fun onForeground(enabled: Boolean, now: Long = System.currentTimeMillis()): Boolean {
+    fun onForeground(
+        enabled: Boolean,
+        graceMs: Long = DEFAULT_GRACE_MS,
+        now: Long = System.currentTimeMillis(),
+    ): Boolean {
         val away = leftAt?.let { now - it } ?: 0L
         leftAt = null
-        if (enabled && away >= GRACE_MS) _locked.value = true
+        if (enabled && away >= graceMs) _locked.value = true
         return _locked.value
     }
 
@@ -55,7 +59,7 @@ class AppLock @Inject constructor() {
         if (!enabled) _locked.value = false
     }
 
-    private companion object {
-        const val GRACE_MS = 30_000L
+    companion object {
+        const val DEFAULT_GRACE_MS = 30_000L
     }
 }

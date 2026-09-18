@@ -184,6 +184,14 @@ export async function push(recipientUids: string[], payload: PushPayload): Promi
     .map((user) => ({ uid: user.id, token: user.get("fcmToken") as string | undefined }))
     .filter((target): target is { uid: string; token: string } => !!target.token);
 
+  // Silence here is indistinguishable from a push that was sent and ignored,
+  // and an account with no token is the likeliest reason a notification never
+  // arrives, so it is said out loud.
+  const untargeted = users.filter((user) => !user.get("fcmToken"));
+  if (untargeted.length > 0) {
+    logger.warn("no push token", { uids: untargeted.map((user) => user.id) });
+  }
+
   if (targets.length === 0) return;
 
   const data: Record<string, string> = {

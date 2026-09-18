@@ -72,12 +72,12 @@ export const signMediaUpload = onCall(
 
     const signature = sign(
       { public_id: publicId, timestamp: String(timestamp) },
-      cloudinaryApiSecret.value()
+      secret(cloudinaryApiSecret.value())
     );
 
     return {
-      cloudName: cloudinaryCloudName.value(),
-      apiKey: cloudinaryApiKey.value(),
+      cloudName: secret(cloudinaryCloudName.value()),
+      apiKey: secret(cloudinaryApiKey.value()),
       publicId,
       timestamp,
       signature,
@@ -85,6 +85,19 @@ export const signMediaUpload = onCall(
     };
   }
 );
+
+/**
+ * A secret as it was meant to be stored.
+ *
+ * Setting a secret by piping a file or pasting into a terminal carries the
+ * line ending with it, and Secret Manager stores whatever it is given. A key
+ * with a newline on the end is rejected by Cloudinary as a bad key, and a
+ * secret with one produces a signature that never matches — both surface only
+ * as a 401 from an upload, with nothing to point at the cause.
+ */
+function secret(value: string): string {
+  return value.trim();
+}
 
 /**
  * Cloudinary's scheme: the parameters that were sent, sorted by name, joined

@@ -9,30 +9,45 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val LightScheme = lightColorScheme(
-    primary = Teal40,
-    onPrimary = androidx.compose.ui.graphics.Color.White,
+    primary = WhatsAppForestGreen,
+    onPrimary = Color.White,
     primaryContainer = Teal90,
     onPrimaryContainer = Teal20,
-    secondary = Teal60,
-    background = Sand95,
-    onBackground = Ink10,
-    surface = androidx.compose.ui.graphics.Color.White,
-    onSurface = Ink10,
+    secondary = WhatsAppTealGreen,
+    onSecondary = Color.White,
+    secondaryContainer = CreditContainerLight,
+    onSecondaryContainer = WhatsAppForestGreen,
+    background = LightAppBackground,
+    onBackground = LightTextPrimary,
+    surface = LightSurface,
+    onSurface = LightTextPrimary,
+    surfaceVariant = Color(0xFFF0F2F5),
+    onSurfaceVariant = LightTextSecondary,
+    outline = Color(0xFFD1D7DB),
+    outlineVariant = LightDivider,
 )
 
 private val DarkScheme = darkColorScheme(
-    primary = Teal60,
-    onPrimary = Teal10,
-    primaryContainer = Teal20,
-    onPrimaryContainer = Teal90,
-    secondary = Teal90,
-    background = Ink10,
-    onBackground = Ink90,
-    surface = Ink20,
-    onSurface = Ink90,
+    primary = WhatsAppTealGreen,
+    onPrimary = DarkAppBackground,
+    primaryContainer = Color(0xFF00382E),
+    onPrimaryContainer = WhatsAppTealGreen,
+    secondary = WhatsAppVibrantGreen,
+    onSecondary = DarkAppBackground,
+    secondaryContainer = CreditContainerDark,
+    onSecondaryContainer = WhatsAppTealGreen,
+    background = DarkAppBackground,
+    onBackground = DarkTextPrimary,
+    surface = DarkSurface,
+    onSurface = DarkTextPrimary,
+    surfaceVariant = Color(0xFF1F2C34),
+    onSurfaceVariant = DarkTextSecondary,
+    outline = Color(0xFF374248),
+    outlineVariant = DarkDivider,
 )
 
 @Composable
@@ -51,13 +66,35 @@ fun PayChatTheme(
 
     val ledgerColors = if (darkTheme) {
         LedgerColors(
-            CreditDark, DebitDark, PendingDark, OutgoingBubbleDark, IncomingBubbleDark,
-            HeroStartDark, HeroEndDark, CreditContainerDark, DebitContainerDark,
+            credit = CreditDark,
+            debit = DebitDark,
+            pending = PendingDark,
+            outgoingBubble = OutgoingBubbleDark,
+            incomingBubble = IncomingBubbleDark,
+            heroStart = HeroStartDark,
+            heroEnd = HeroEndDark,
+            creditContainer = CreditContainerDark,
+            debitContainer = DebitContainerDark,
+            chatBackground = DarkAppBackground,
+            readTick = WhatsAppBlueTicks,
+            unreadBadge = WhatsAppVibrantGreen,
+            divider = DarkDivider,
         )
     } else {
         LedgerColors(
-            CreditLight, DebitLight, PendingLight, OutgoingBubbleLight, IncomingBubbleLight,
-            HeroStartLight, HeroEndLight, CreditContainerLight, DebitContainerLight,
+            credit = CreditLight,
+            debit = DebitLight,
+            pending = PendingLight,
+            outgoingBubble = OutgoingBubbleLight,
+            incomingBubble = IncomingBubbleLight,
+            heroStart = HeroStartLight,
+            heroEnd = HeroEndLight,
+            creditContainer = CreditContainerLight,
+            debitContainer = DebitContainerLight,
+            chatBackground = LightChatCanvas,
+            readTick = WhatsAppBlueTicks,
+            unreadBadge = WhatsAppVibrantGreen,
+            divider = LightDivider,
         )
     }
 
@@ -69,3 +106,6 @@ fun PayChatTheme(
         )
     }
 }
+
+val LocalHideBalances = androidx.compose.runtime.compositionLocalOf { false }
+

@@ -52,6 +52,7 @@ class MainActivity : FragmentActivity() {
             val shell: AppShellViewModel = hiltViewModel()
             val theme by shell.theme.collectAsStateWithLifecycle()
             val locked by shell.locked.collectAsStateWithLifecycle()
+            val hideBalances by shell.hideBalances.collectAsStateWithLifecycle()
 
             // Leaving and returning is what arms the lock, so the shell has
             // to hear about both.
@@ -61,26 +62,30 @@ class MainActivity : FragmentActivity() {
             }
 
             PayChatTheme(darkTheme = theme.isDark()) {
-                RequestNotificationPermission()
-                val threadId by openThread.collectAsState()
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.paychat.paychat.ui.theme.LocalHideBalances provides hideBalances
                 ) {
-                    PayChatNavHost(
-                        navController = rememberNavController(),
-                        openThreadId = threadId,
-                        onThreadOpened = { openThread.value = null },
-                    )
-
-                    // Drawn over the graph rather than as a destination: the
-                    // app behind it keeps its place, and no back press can
-                    // reach past it.
-                    if (locked) {
-                        LockScreen(
-                            activity = this@MainActivity,
-                            onUnlocked = shell::unlocked,
+                    RequestNotificationPermission()
+                    val threadId by openThread.collectAsState()
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        PayChatNavHost(
+                            navController = rememberNavController(),
+                            openThreadId = threadId,
+                            onThreadOpened = { openThread.value = null },
                         )
+
+                        // Drawn over the graph rather than as a destination: the
+                        // app behind it keeps its place, and no back press can
+                        // reach past it.
+                        if (locked) {
+                            LockScreen(
+                                activity = this@MainActivity,
+                                onUnlocked = shell::unlocked,
+                            )
+                        }
                     }
                 }
             }

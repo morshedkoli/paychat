@@ -30,6 +30,7 @@ class TransactionsViewModelTest {
     private val query: TransactionQuery = mockk()
     private val transactions: TransactionRepository = mockk()
     private val threads: ThreadsRepository = mockk()
+    private val preferences: com.paychat.paychat.data.settings.AppPreferences = mockk(relaxed = true)
 
     private val me = "uid-me"
 
@@ -70,7 +71,7 @@ class TransactionsViewModelTest {
         every { transactions.observeBalances() } returns flowOf(
             listOf(ThreadBalanceEntity(threadId = "thread-1", amountMinor = 155000, updatedAt = 0))
         )
-        return TransactionsViewModel(query, transactions, threads)
+        return TransactionsViewModel(query, transactions, threads, preferences)
     }
 
     @Test
@@ -114,7 +115,7 @@ class TransactionsViewModelTest {
         every { query.observeRecent(any()) } returns flowOf(fullPage)
         every { threads.observeThreads() } returns flowOf(emptyList())
         every { transactions.observeBalances() } returns flowOf(emptyList())
-        val model = TransactionsViewModel(query, transactions, threads)
+        val model = TransactionsViewModel(query, transactions, threads, preferences)
 
         model.state.test {
             awaitItem().let { if (it.loading) awaitItem() else it }
@@ -159,7 +160,7 @@ class TransactionsViewModelTest {
             listOf(ThreadBalanceEntity(threadId = "thread-1", amountMinor = 155000, updatedAt = 0))
         )
 
-        TransactionsViewModel(query, transactions, threads).state.test {
+        TransactionsViewModel(query, transactions, threads, preferences).state.test {
             val loaded = awaitItem().let { if (it.loading) awaitItem() else it }
             assertEquals(0, loaded.people)
             assertEquals(0, loaded.summary.net.minor)
@@ -193,7 +194,7 @@ class TransactionsViewModelTest {
             listOf(ThreadBalanceEntity(threadId = "thread-1", amountMinor = 240000, updatedAt = 0))
         )
 
-        TransactionsViewModel(query, transactions, threads).state.test {
+        TransactionsViewModel(query, transactions, threads, preferences).state.test {
             val loaded = awaitItem().let { if (it.loading) awaitItem() else it }
             val rows = loaded.days.flatMap { it.rows }
             assertEquals(listOf("gave", "inherited"), rows.map { it.txnId }.sorted())

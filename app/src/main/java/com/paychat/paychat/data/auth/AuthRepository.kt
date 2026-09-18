@@ -20,6 +20,8 @@ import kotlinx.coroutines.tasks.await
 import java.io.IOException
 import java.util.UUID
 import com.paychat.paychat.data.local.PayChatDatabase
+import com.paychat.paychat.data.local.dao.UserDao
+import com.paychat.paychat.data.local.entity.UserEntity
 import com.paychat.paychat.data.sync.OutboxScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,6 +49,7 @@ class AuthRepository @Inject constructor(
     private val functions: FirebaseFunctions,
     private val session: SessionStore,
     private val database: PayChatDatabase,
+    private val userDao: UserDao,
     private val outbox: OutboxScheduler,
 ) {
 
@@ -115,6 +118,7 @@ class AuthRepository @Inject constructor(
         }.await()
 
         session.save(uid = user.uid, phone = phoneE164, sessionId = sessionId)
+        cacheSelf(uid = user.uid, phone = phoneE164, name = name, updatedAt = now)
         AuthedUser(uid = user.uid, phone = phoneE164, name = name)
     }
 
@@ -140,6 +144,7 @@ class AuthRepository @Inject constructor(
         val doc = firestore.collection(Collections.USERS).document(user.uid)
         val name = doc.get().await().getString(UserFields.NAME).orEmpty()
         session.save(uid = user.uid, phone = phoneE164, sessionId = sessionId)
+        cacheSelf(uid = user.uid, phone = phoneE164, name = name, updatedAt = now)
         AuthedUser(uid = user.uid, phone = phoneE164, name = name)
     }
 
@@ -199,6 +204,33 @@ class AuthRepository @Inject constructor(
         }
 
         session.save(uid = user.uid, phone = phoneE164, sessionId = sessionId)
+        cacheSelf(
+            uid = user.uid,
+            phone = phoneE164,
+            name = userDoc.getString(UserFields.NAME).orEmpty().ifBlank { "User" },
+            updatedAt = now,
+        )
+    }
+
+    /**
+     * Keeps a local copy of the signed-in user's own profile.
+     *
+     * The profile screen reads the name from Room, and its one fetch of the
+     * server copy is allowed to fail quietly. Without this row that failure
+     * leaves the identity card on its empty-name placeholder even though a
+     * name was given at registration.
+     */
+    private suspend fun cacheSelf(uid: String, phone: String, name: String, updatedAt: Long) {
+        val existing = userDao.byUid(uid)
+        userDao.upsert(
+            UserEntity(
+                uid = uid,
+                phone = phone,
+                name = name.ifBlank { existing?.name.orEmpty() },
+                photoUrl = existing?.photoUrl,
+                updatedAt = updatedAt,
+            )
+        )
     }
 
     /**

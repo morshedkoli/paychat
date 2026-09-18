@@ -29,9 +29,10 @@ import com.paychat.paychat.feature.auth.AuthHero
 import com.paychat.paychat.feature.auth.AuthCard
 import com.paychat.paychat.feature.auth.StaggeredEntrance
 import com.paychat.paychat.ui.components.PhoneNumberField
-import com.paychat.paychat.ui.theme.Ink20
-import com.paychat.paychat.ui.theme.Ink90
-import com.paychat.paychat.ui.theme.Teal90
+import com.paychat.paychat.ui.theme.DarkSurface
+import com.paychat.paychat.ui.theme.DarkTextPrimary
+import com.paychat.paychat.ui.theme.DarkTextSecondary
+import com.paychat.paychat.ui.theme.WhatsAppTealGreen
 import com.paychat.paychat.ui.components.PrimaryButton
 
 /**
@@ -60,12 +61,6 @@ fun PhoneEntryScreen(
         val display = state.offerRegistrationDisplay ?: e164
         AlertDialog(
             onDismissRequest = viewModel::onRegistrationDeclined,
-            // Ink, not the theme's white: the dialog interrupts a dark flow,
-            // and on a light-mode phone the default lands as a white slab in
-            // the middle of it.
-            containerColor = Ink20,
-            titleContentColor = Color.White,
-            textContentColor = Ink90.copy(alpha = 0.75f),
             title = { Text("Create an account?") },
             text = {
                 Text(
@@ -77,11 +72,11 @@ fun PhoneEntryScreen(
                 TextButton(onClick = {
                     onNewNumber(e164)
                     viewModel.onNavigated()
-                }) { Text("Create account", color = Teal90) }
+                }) { Text("Create account", color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::onRegistrationDeclined) {
-                    Text("Cancel", color = Ink90.copy(alpha = 0.7f))
+                    Text("Cancel")
                 }
             },
         )

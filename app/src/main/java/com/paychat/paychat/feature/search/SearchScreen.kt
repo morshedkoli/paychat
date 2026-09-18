@@ -73,8 +73,16 @@ fun SearchScreen(
                         value = state.query,
                         onValueChange = viewModel::onQueryChange,
                         modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                        placeholder = { Text("Search chats and transactions") },
+                        placeholder = {
+                            Text(
+                                "Search...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            )
+                        },
                         singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge,
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,

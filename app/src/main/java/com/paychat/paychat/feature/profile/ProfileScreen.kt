@@ -3,61 +3,74 @@ package com.paychat.paychat.feature.profile
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.paychat.paychat.core.money.Money
 import com.paychat.paychat.ui.components.Avatar
+import com.paychat.paychat.ui.components.PayChatSpinner
 import com.paychat.paychat.ui.components.shareFile
 import com.paychat.paychat.ui.components.shareStatement
-import com.paychat.paychat.ui.theme.AmountStyle
+import com.paychat.paychat.ui.theme.LocalHideBalances
 import com.paychat.paychat.ui.theme.PayChatTheme
+import kotlinx.coroutines.launch
 
 /**
  * The profile tab: who you are on top, then everything about the account and the
  * app that you can change.
- *
- * This is a tab root, so there is no top bar and no back arrow — there is
- * nothing behind it to go back to.
- *
- * The phone number is shown but not editable: it identifies the account, and
- * changing it would strand every thread and balance recorded against it.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onSignOut: () -> Unit,
@@ -66,10 +79,14 @@ fun ProfileScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboardManager = LocalClipboardManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     var editingName by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showQrDialog by remember { mutableStateOf(false) }
+    var confirmClearCache by remember { mutableStateOf(false) }
 
     val pickPhoto = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -101,7 +118,24 @@ fun ProfileScreen(
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { inner ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Settings",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { inner ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -116,16 +150,31 @@ fun ProfileScreen(
                     )
                 },
                 onEditName = { editingName = true },
+                onCopyPhone = {
+                    clipboardManager.setText(AnnotatedString(state.phone))
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Phone number copied to clipboard")
+                    }
+                },
+                onOpenQr = { showQrDialog = true },
             )
+
+            Spacer(Modifier.height(4.dp))
 
             AppearanceSection(state, onChooseTheme = viewModel::setTheme)
 
-            AccountSection(state, onToggleAppLock = viewModel::setAppLockEnabled)
+            AccountSection(
+                state = state,
+                onToggleAppLock = viewModel::setAppLockEnabled,
+                onSelectLockTimeout = viewModel::setLockTimeout,
+                onToggleAlwaysHideBalances = viewModel::setAlwaysHideBalancesOnLaunch,
+            )
 
             DataSection(
                 state,
                 onExportStatements = viewModel::exportEverything,
                 onExportData = viewModel::exportData,
+                onClearCache = { confirmClearCache = true },
             )
 
             DangerSection(
@@ -133,7 +182,45 @@ fun ProfileScreen(
                 onSignOut = { confirmSignOut = true },
                 onDeleteAccount = { confirmDelete = true },
             )
+
+            Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (showQrDialog) {
+        PersonalQrDialog(
+            name = state.name,
+            phone = state.phone,
+            photoUrl = state.photoUrl,
+            onDismiss = { showQrDialog = false },
+            onShare = {
+                val link = QrCodeHelper.createPayChatUri(state.phone, state.name)
+                val intent = android.content.Intent().apply {
+                    action = android.content.Intent.ACTION_SEND
+                    putExtra(android.content.Intent.EXTRA_TEXT, "Connect or pay with me on PayChat: $link")
+                    type = "text/plain"
+                }
+                context.startActivity(android.content.Intent.createChooser(intent, "Share PayChat QR"))
+            },
+            onCopyLink = {
+                val link = QrCodeHelper.createPayChatUri(state.phone, state.name)
+                clipboardManager.setText(AnnotatedString(link))
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Payment link copied to clipboard")
+                }
+            },
+        )
+    }
+
+    if (confirmClearCache) {
+        ClearCacheDialog(
+            cacheSize = state.cacheSizeFormatted,
+            onDismiss = { confirmClearCache = false },
+            onConfirm = {
+                confirmClearCache = false
+                viewModel.clearCache()
+            },
+        )
     }
 
     if (editingName) {
@@ -169,134 +256,212 @@ fun ProfileScreen(
 }
 
 /**
- * The identity card: picture, name, number, and where the account stands.
- *
- * The picture carries a camera badge and the name is tappable, which replaces
- * the explanatory line and the Edit button the settings header used to need.
+ * The interactive profile identity card:
+ * large avatar with camera badge, user name with edit button,
+ * phone number with 1-tap clipboard copy, and net balance pill badge.
  */
 @Composable
 private fun ProfileIdentity(
     state: ProfileUiState,
     onChangePhoto: () -> Unit,
     onEditName: () -> Unit,
+    onCopyPhone: () -> Unit,
+    onOpenQr: () -> Unit,
 ) {
+    val ledger = PayChatTheme.ledger
+    val hideBalances = LocalHideBalances.current
+
+    val netLabel = if (hideBalances) {
+        Money.MASKED
+    } else when {
+        state.stats.net.isZero -> "All settled"
+        state.stats.net.isPositive -> "You will get ${state.stats.net.abs().format()}"
+        else -> "You will give ${state.stats.net.abs().format()}"
+    }
+
+    val netColour = when {
+        hideBalances || state.stats.net.isZero -> MaterialTheme.colorScheme.onSurfaceVariant
+        state.stats.net.isPositive -> ledger.credit
+        else -> ledger.debit
+    }
+
+    val netBadgeBg = when {
+        hideBalances || state.stats.net.isZero -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        state.stats.net.isPositive -> ledger.credit.copy(alpha = 0.12f)
+        else -> ledger.debit.copy(alpha = 0.12f)
+    }
+
     Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        shape = RoundedCornerShape(20.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
         ) {
-            Box {
-                Avatar(
-                    name = state.name,
-                    key = state.phone,
-                    photoUrl = state.photoUrl,
-                    size = 96.dp,
-                    modifier = Modifier.clickable(
-                        enabled = !state.uploadingPhoto,
-                        onClick = onChangePhoto,
-                    ),
-                )
-
-                if (state.uploadingPhoto) {
-                    CircularProgressIndicator(
-                        Modifier.size(96.dp).align(Alignment.Center),
-                        strokeWidth = 3.dp,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Large Avatar with photo edit badge
+                Box(modifier = Modifier.size(68.dp)) {
+                    Avatar(
+                        name = state.name,
+                        key = state.phone,
+                        photoUrl = state.photoUrl,
+                        size = 68.dp,
+                        modifier = Modifier.clickable(
+                            enabled = !state.uploadingPhoto,
+                            onClick = onChangePhoto,
+                        ),
                     )
-                } else {
-                    // Sits on the picture's edge, so what tapping it does needs
-                    // no sentence underneath to explain it.
-                    Box(
+
+                    if (state.uploadingPhoto) {
+                        PayChatSpinner(
+                            modifier = Modifier.align(Alignment.Center),
+                            size = 68.dp,
+                            strokeWidth = 3.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .clickable(onClick = onChangePhoto),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.PhotoCamera,
+                                contentDescription = "Change your picture",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
+
+                // Name & phone
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 16.dp, end = 4.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .clickable(onClick = onChangePhoto),
-                        contentAlignment = Alignment.Center,
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onEditName)
+                            .padding(vertical = 2.dp),
                     ) {
+                        Text(
+                            text = state.name.ifBlank { "Your name" },
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.width(6.dp))
                         Icon(
-                            Icons.Default.PhotoCamera,
-                            contentDescription = "Change your picture",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(17.dp),
+                            Icons.Default.Edit,
+                            contentDescription = "Edit name",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+
+                    // Phone number with 1-tap copy
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onCopyPhone)
+                            .padding(vertical = 2.dp, horizontal = 2.dp),
+                    ) {
+                        Text(
+                            text = state.phone,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = "Copy phone number",
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            modifier = Modifier.size(14.dp),
                         )
                     }
                 }
+
+                // QR Code Button
+                IconButton(
+                    onClick = onOpenQr,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QrCode,
+                        contentDescription = "My QR Code",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
 
-            Row(
+            // Net balance pill badge strip
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = netBadgeBg,
                 modifier = Modifier
-                    .padding(top = 14.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onEditName)
-                    .padding(horizontal = 10.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxWidth()
+                    .padding(top = 14.dp),
             ) {
-                Text(
-                    state.name.ifBlank { "Your name" },
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Change your name",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 6.dp).size(16.dp),
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AccountBalanceWallet,
+                            contentDescription = null,
+                            tint = netColour,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Net Balance",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    Text(
+                        text = netLabel,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = netColour,
+                    )
+                }
             }
-
-            Text(
-                state.phone,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            StandingRow(state.stats)
         }
     }
 }
 
-/**
- * Net balance, conversations, settled. The net reads as what it means rather
- * than as a signed number: money coming in and money going out are different
- * facts, not one figure with a sign.
- */
-@Composable
-private fun StandingRow(stats: ProfileStats) {
-    val ledger = PayChatTheme.ledger
-    val netLabel = when {
-        stats.net.isZero -> "All settled"
-        stats.net.isPositive -> "You will get"
-        else -> "You will give"
-    }
-    val netColour = when {
-        stats.net.isZero -> MaterialTheme.colorScheme.onSurface
-        stats.net.isPositive -> ledger.credit
-        else -> ledger.debit
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        Standing(netLabel, stats.net.abs().format(), netColour)
-        Standing("Conversations", stats.conversations.toString(), MaterialTheme.colorScheme.onSurface)
-        Standing("Settled up", stats.settled.toString(), MaterialTheme.colorScheme.onSurface)
-    }
-}
-
-@Composable
-private fun Standing(label: String, value: String, colour: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = AmountStyle, color = colour)
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}

@@ -54,7 +54,7 @@ class ProfileRepository @Inject constructor(
     suspend fun setName(name: String): Result<Unit> = runCatching {
         val uid = auth.currentUid ?: error("not signed in")
         write(uid, mapOf(UserFields.NAME to name))
-        userDao.byUid(uid)?.let { userDao.upsert(it.copy(name = name)) }
+        cache(uid) { it.copy(name = name) }
     }
 
     /**
@@ -74,7 +74,22 @@ class ProfileRepository @Inject constructor(
         file.delete()
 
         write(uid, mapOf(UserFields.PHOTO_URL to uploaded.secureUrl))
-        userDao.byUid(uid)?.let { userDao.upsert(it.copy(photoUrl = uploaded.secureUrl)) }
+        cache(uid) { it.copy(photoUrl = uploaded.secureUrl) }
+    }
+
+    /**
+     * Applies [change] to the cached profile, creating the row if it is not
+     * there.
+     *
+     * The screen reads the name from Room, so an edit that only reached the
+     * server would appear to have done nothing: before this, a device whose
+     * row had never been fetched showed the placeholder again the moment the
+     * dialog closed.
+     */
+    private suspend fun cache(uid: String, change: (UserEntity) -> UserEntity) {
+        val existing = userDao.byUid(uid)
+            ?: UserEntity(uid = uid, phone = "", name = "", photoUrl = null, updatedAt = 0L)
+        userDao.upsert(change(existing).copy(updatedAt = System.currentTimeMillis()))
     }
 
     private suspend fun write(uid: String, fields: Map<String, Any?>) {
@@ -90,11 +105,16 @@ class ProfileRepository @Inject constructor(
         }.getOrNull() ?: return
         if (!document.exists()) return
 
+        // A field the server copy is missing must not wipe what is already
+        // cached: the identity card would fall back to its placeholder.
+        val cached = userDao.byUid(uid)
         userDao.upsert(
             UserEntity(
                 uid = uid,
-                phone = document.getString(UserFields.PHONE).orEmpty(),
-                name = document.getString(UserFields.NAME).orEmpty(),
+                phone = document.getString(UserFields.PHONE)
+                    ?.ifBlank { null } ?: cached?.phone.orEmpty(),
+                name = document.getString(UserFields.NAME)
+                    ?.ifBlank { null } ?: cached?.name.orEmpty(),
                 photoUrl = document.getString(UserFields.PHOTO_URL),
                 updatedAt = document.getLongOrTimestamp(UserFields.UPDATED_AT) ?: 0L,
             )

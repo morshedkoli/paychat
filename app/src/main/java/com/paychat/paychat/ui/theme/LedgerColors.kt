@@ -8,8 +8,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * Colours that carry ledger meaning and therefore do not belong in the
- * Material colour scheme.
+ * Colours that carry ledger and WhatsApp chat semantics.
  */
 @Immutable
 data class LedgerColors(
@@ -22,6 +21,10 @@ data class LedgerColors(
     val heroEnd: Color,
     val creditContainer: Color,
     val debitContainer: Color,
+    val chatBackground: Color = Color.Transparent,
+    val readTick: Color = WhatsAppBlueTicks,
+    val unreadBadge: Color = WhatsAppVibrantGreen,
+    val divider: Color = Color(0xFF222D34),
 )
 
 val LocalLedgerColors = staticCompositionLocalOf {
@@ -35,6 +38,10 @@ val LocalLedgerColors = staticCompositionLocalOf {
         heroEnd = HeroEndLight,
         creditContainer = CreditContainerLight,
         debitContainer = DebitContainerLight,
+        chatBackground = LightChatCanvas,
+        readTick = WhatsAppBlueTicks,
+        unreadBadge = WhatsAppVibrantGreen,
+        divider = LightDivider,
     )
 }
 

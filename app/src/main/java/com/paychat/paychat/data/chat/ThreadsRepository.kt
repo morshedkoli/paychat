@@ -67,6 +67,20 @@ class ThreadsRepository @Inject constructor(
     }
 
     /**
+     * Reads one conversation once, for when there is no listener running.
+     *
+     * The conversation list holds the listener, and it only exists while that
+     * tab is on screen. A push arriving for an app in the background has to
+     * bring the row itself or the list would be stale the next time it opened.
+     */
+    suspend fun refreshThread(threadId: String): Result<Unit> = runCatching {
+        val viewerUid = auth.currentUid ?: return@runCatching
+        val document = firestore.collection(Collections.THREADS).document(threadId).get().await()
+        val thread = document.toThreadEntity(viewerUid) ?: return@runCatching
+        persist(listOf(thread))
+    }
+
+    /**
      * Stores the threads, filling in any peer names that are not cached yet.
      *
      * The existing row's balance is kept: it is derived from transactions and
@@ -112,26 +126,68 @@ class ThreadsRepository @Inject constructor(
         if (uids.isEmpty()) return emptyMap()
 
         val cached = uids.mapNotNull { uid -> userDao.byUid(uid) }.associateBy { it.uid }
-        val missing = uids.filterNot { it in cached }
-        if (missing.isEmpty()) return cached
+        val now = System.currentTimeMillis()
 
-        val fetched = missing.mapNotNull { uid ->
-            val document = runCatching {
-                firestore.collection(Collections.USERS).document(uid).get().await()
-            }.getOrNull() ?: return@mapNotNull null
-            if (!document.exists()) return@mapNotNull null
+        // A profile is not fetched once and kept for ever: the other person
+        // changes their picture and their name, and nothing tells this device
+        // when they do. A row older than the refresh interval is read again,
+        // which is what makes a new picture appear in the conversation list
+        // rather than the one cached the day the thread was first seen.
+        val stale = cached.values
+            .filter { now - it.updatedAt > PROFILE_REFRESH_MS }
+            .map { it.uid }
+        val wanted = uids.filterNot { it in cached } + stale
+        if (wanted.isEmpty()) return cached
 
-            UserEntity(
-                uid = uid,
-                phone = document.getString(UserFields.PHONE).orEmpty(),
-                name = document.getString(UserFields.NAME).orEmpty(),
-                photoUrl = document.getString(UserFields.PHOTO_URL),
-                updatedAt = document.getLongOrTimestamp(UserFields.UPDATED_AT) ?: 0L,
-            )
-        }
+        val fetched = wanted.distinct().mapNotNull { uid -> fetchProfile(uid) }
         if (fetched.isNotEmpty()) userDao.upsertAll(fetched)
 
         return cached + fetched.associateBy { it.uid }
+    }
+
+    /**
+     * Reads one profile from the server, keeping the local row's own moment
+     * rather than the document's: the refresh interval measures when this
+     * device last looked, not when the other person last edited.
+     */
+    private suspend fun fetchProfile(uid: String): UserEntity? {
+        val document = runCatching {
+            firestore.collection(Collections.USERS).document(uid).get().await()
+        }.getOrNull() ?: return null
+        if (!document.exists()) return null
+
+        return UserEntity(
+            uid = uid,
+            phone = document.getString(UserFields.PHONE).orEmpty(),
+            name = document.getString(UserFields.NAME).orEmpty(),
+            photoUrl = document.getString(UserFields.PHOTO_URL),
+            updatedAt = System.currentTimeMillis(),
+        )
+    }
+
+    /**
+     * Reads the other person's profile now, whatever the refresh interval
+     * says. Opening a conversation is the moment their picture and name are
+     * most looked at, so it is the moment worth spending a read on.
+     */
+    suspend fun refreshPeer(threadId: String): Result<Unit> = runCatching {
+        val peerUid = threadDao.byId(threadId)?.peerUid ?: return@runCatching
+        val profile = fetchProfile(peerUid) ?: return@runCatching
+        userDao.upsert(profile)
+
+        threadDao.byId(threadId)?.let { thread ->
+            val updated = thread.copy(
+                peerName = profile.name.ifEmpty { thread.peerName },
+                peerPhone = profile.phone.ifEmpty { thread.peerPhone },
+                peerPhotoUrl = profile.photoUrl ?: thread.peerPhotoUrl,
+            )
+            if (updated != thread) threadDao.upsert(updated)
+        }
+    }
+
+    private companion object {
+        /** How long a cached profile is trusted before it is read again. */
+        const val PROFILE_REFRESH_MS = 15 * 60 * 1000L
     }
 }
 
