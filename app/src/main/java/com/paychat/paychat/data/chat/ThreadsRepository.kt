@@ -15,11 +15,15 @@ import com.paychat.paychat.data.remote.LocalContactFields
 import com.paychat.paychat.data.remote.ThreadFields
 import com.paychat.paychat.data.remote.UserFields
 import com.paychat.paychat.data.remote.getLongOrTimestamp
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -117,6 +121,9 @@ class ThreadsRepository @Inject constructor(
         if (changed.isNotEmpty()) threadDao.upsertAll(changed)
     }
 
+    /** Track recently failed lookups to avoid hammering Firestore on rapid snapshot updates */
+    private val failedLookups = ConcurrentHashMap<String, Long>()
+
     /**
      * The cached profiles, fetching and storing any person the app has not
      * seen before. Without this a conversation the other person started would
@@ -125,10 +132,11 @@ class ThreadsRepository @Inject constructor(
     private suspend fun profilesFor(uids: List<String>): Map<String, UserEntity> {
         if (uids.isEmpty()) return emptyMap()
 
-        val cached = uids.mapNotNull { uid -> userDao.byUid(uid) }.associateBy { it.uid }
+        // Batch query cached users from Room in a single round-trip
+        val cached = userDao.byUids(uids).associateBy { it.uid }
         val now = System.currentTimeMillis()
 
-        // A profile is not fetched once and kept for ever: the other person
+        // A profile is not fetched once and kept forever: the other person
         // changes their picture and their name, and nothing tells this device
         // when they do. A row older than the refresh interval is read again,
         // which is what makes a new picture appear in the conversation list
@@ -136,10 +144,29 @@ class ThreadsRepository @Inject constructor(
         val stale = cached.values
             .filter { now - it.updatedAt > PROFILE_REFRESH_MS }
             .map { it.uid }
-        val wanted = uids.filterNot { it in cached } + stale
+        val missing = uids.filterNot { it in cached }
+
+        // Skip UIDs that failed recently to avoid hammering Firestore during rapid snapshot updates
+        val wanted = (missing + stale).distinct().filter { uid ->
+            val lastFailed = failedLookups[uid]
+            lastFailed == null || (now - lastFailed) > FAILED_LOOKUP_COOLDOWN_MS
+        }
         if (wanted.isEmpty()) return cached
 
-        val fetched = wanted.distinct().mapNotNull { uid -> fetchProfile(uid) }
+        // Fetch uncached / stale profiles in parallel
+        val fetched = coroutineScope {
+            wanted.map { uid ->
+                async {
+                    val profile = fetchProfile(uid)
+                    if (profile == null) {
+                        failedLookups[uid] = now
+                    } else {
+                        failedLookups.remove(uid)
+                    }
+                    profile
+                }
+            }.awaitAll().filterNotNull()
+        }
         if (fetched.isNotEmpty()) userDao.upsertAll(fetched)
 
         return cached + fetched.associateBy { it.uid }
@@ -156,9 +183,13 @@ class ThreadsRepository @Inject constructor(
         }.getOrNull() ?: return null
         if (!document.exists()) return null
 
+        val existing = userDao.byUid(uid)
+        val phoneFromServer = document.getString(UserFields.PHONE).orEmpty()
+        val phone = phoneFromServer.ifEmpty { existing?.phone.orEmpty() }
+
         return UserEntity(
             uid = uid,
-            phone = document.getString(UserFields.PHONE).orEmpty(),
+            phone = phone,
             name = document.getString(UserFields.NAME).orEmpty(),
             photoUrl = document.getString(UserFields.PHOTO_URL),
             updatedAt = System.currentTimeMillis(),
@@ -166,12 +197,29 @@ class ThreadsRepository @Inject constructor(
     }
 
     /**
-     * Reads the other person's profile now, whatever the refresh interval
-     * says. Opening a conversation is the moment their picture and name are
-     * most looked at, so it is the moment worth spending a read on.
+     * Reads the other person's profile, checking the local cache first.
+     * Opening a conversation is the moment their picture and name are
+     * most looked at, but if already fresh within [PEER_REFRESH_WINDOW_MS],
+     * we avoid an unnecessary network read unless [force] is true.
      */
-    suspend fun refreshPeer(threadId: String): Result<Unit> = runCatching {
+    suspend fun refreshPeer(threadId: String, force: Boolean = false): Result<Unit> = runCatching {
         val peerUid = threadDao.byId(threadId)?.peerUid ?: return@runCatching
+        val now = System.currentTimeMillis()
+        val cached = userDao.byUid(peerUid)
+
+        if (!force && cached != null && (now - cached.updatedAt) < PEER_REFRESH_WINDOW_MS) {
+            // Room cache is still fresh: sync thread fields locally if needed and return
+            threadDao.byId(threadId)?.let { thread ->
+                val updated = thread.copy(
+                    peerName = cached.name.ifEmpty { thread.peerName },
+                    peerPhone = cached.phone.ifEmpty { thread.peerPhone },
+                    peerPhotoUrl = cached.photoUrl ?: thread.peerPhotoUrl,
+                )
+                if (updated != thread) threadDao.upsert(updated)
+            }
+            return@runCatching
+        }
+
         val profile = fetchProfile(peerUid) ?: return@runCatching
         userDao.upsert(profile)
 
@@ -186,8 +234,14 @@ class ThreadsRepository @Inject constructor(
     }
 
     private companion object {
-        /** How long a cached profile is trusted before it is read again. */
+        /** How long a cached profile is trusted in thread lists before it is read again. */
         const val PROFILE_REFRESH_MS = 15 * 60 * 1000L
+
+        /** Freshness window when opening a conversation before forcing a remote read. */
+        const val PEER_REFRESH_WINDOW_MS = 5 * 60 * 1000L
+
+        /** Cooldown before re-attempting a profile lookup that returned null or failed. */
+        const val FAILED_LOOKUP_COOLDOWN_MS = 5 * 60 * 1000L
     }
 }
 

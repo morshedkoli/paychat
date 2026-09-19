@@ -406,14 +406,32 @@ class TransactionRepository @Inject constructor(
 
     suspend fun persist(threadId: String, transactions: List<TransactionEntity>) {
         if (transactions.isEmpty()) return
+        val viewerUid = auth.currentUid
 
         // Anything still waiting to upload is newer here than on the server,
-        // so the local row wins until the outbox has caught up.
-        val unsynced = transactionDao.forThread(threadId)
+        // so the local row wins until the outbox has caught up — with one
+        // exception: when the counterparty has resolved the transaction on the
+        // server (accepted / rejected it), the server version must win because
+        // the Firestore security rules will refuse the local change anyway.
+        // Without this, a stale local status (e.g. a cancel attempt that lost
+        // the race) would stick on screen indefinitely.
+        val unsyncedMap = transactionDao.forThread(threadId)
             .filter { it.syncState != SyncState.SYNCED }
-            .mapTo(mutableSetOf()) { it.txnId }
+            .associateBy { it.txnId }
 
-        val incoming = transactions.filterNot { it.txnId in unsynced }
+        val incoming = transactions.filter { remote ->
+            val local = unsyncedMap[remote.txnId]
+            if (local == null) {
+                true // No unsynced local version → accept server row
+            } else if (remote.status.isTerminal
+                && remote.resolvedBy != null
+                && remote.resolvedBy != viewerUid
+            ) {
+                true // Counterparty resolved it on the server → server wins
+            } else {
+                false // Local change still pending upload → keep local
+            }
+        }
         if (incoming.isEmpty()) return
 
         transactionDao.upsertAll(incoming)
@@ -444,6 +462,39 @@ class TransactionRepository @Inject constructor(
      */
     suspend fun refreshPending(): Result<Unit> = runCatching {
         transactionDao.threadsWithPending().forEach { threadId -> fetchThread(threadId) }
+    }
+
+    /**
+     * Watches every conversation that still has a pending transaction and
+     * opens a real-time Firestore listener on each one.
+     *
+     * Without this the only path for a resolution to reach the author's
+     * device is a push notification (which can be missed) or the one-shot
+     * [refreshPending] (which runs once when the list screen opens). This
+     * flow keeps the lists live while the user is looking at them.
+     *
+     * Emits (threadId, rows) pairs for the collector to [persist], matching
+     * the same pattern as [syncTransactions].
+     */
+    fun syncPendingTransactions(): Flow<Pair<String, List<TransactionEntity>>> = callbackFlow {
+        val threadIds = transactionDao.threadsWithPending()
+        if (threadIds.isEmpty()) {
+            close()
+            return@callbackFlow
+        }
+
+        val registrations = threadIds.map { threadId ->
+            firestore.collection(Collections.THREADS)
+                .document(threadId)
+                .collection(Collections.TRANSACTIONS)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null) return@addSnapshotListener
+                    val rows = snapshot.documents.mapNotNull { it.toEntity(threadId) }
+                    trySend(threadId to rows)
+                }
+        }
+
+        awaitClose { registrations.forEach { it.remove() } }
     }
 }
 

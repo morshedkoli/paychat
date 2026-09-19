@@ -32,6 +32,9 @@ interface UserDao {
 
     @Query("SELECT * FROM users WHERE uid = :uid LIMIT 1")
     suspend fun byUid(uid: String): UserEntity?
+
+    @Query("SELECT * FROM users WHERE uid IN (:uids)")
+    suspend fun byUids(uids: List<String>): List<UserEntity>
 }
 
 @Dao

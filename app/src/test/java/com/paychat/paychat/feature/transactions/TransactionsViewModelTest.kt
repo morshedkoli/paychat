@@ -34,7 +34,10 @@ class TransactionsViewModelTest {
 
     private val me = "uid-me"
 
-    @Before fun setUp() = Dispatchers.setMain(dispatcher)
+    @Before fun setUp() {
+        Dispatchers.setMain(dispatcher)
+        every { transactions.syncPendingTransactions() } returns flowOf()
+    }
     @After fun tearDown() = Dispatchers.resetMain()
 
     private fun txn(id: String, direction: TxnDirection, amountMinor: Long = 1000) =

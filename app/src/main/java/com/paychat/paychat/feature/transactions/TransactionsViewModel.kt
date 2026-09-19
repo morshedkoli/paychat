@@ -94,6 +94,15 @@ class TransactionsViewModel @Inject constructor(
                 )
             }.collect { next -> _state.update { next } }
         }
+
+        // Live-watch every thread that still has a pending transaction so
+        // that a resolution (accept / reject) by the other person updates
+        // the feed without waiting for a push or the next app launch.
+        viewModelScope.launch {
+            transactions.syncPendingTransactions().collect { (threadId, rows) ->
+                transactions.persist(threadId, rows)
+            }
+        }
     }
 
     fun setFilter(next: FeedFilter) {

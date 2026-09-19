@@ -113,6 +113,15 @@ class ChatsViewModel @Inject constructor(
         viewModelScope.launch {
             transactions.syncBalances().collect { transactions.persistBalances(it) }
         }
+
+        // Live-watch every thread that still has a pending transaction so
+        // that a resolution (accept / reject) by the other person updates
+        // the list without waiting for a push or the next app launch.
+        viewModelScope.launch {
+            transactions.syncPendingTransactions().collect { (threadId, rows) ->
+                transactions.persist(threadId, rows)
+            }
+        }
     }
 
     fun errorShown() = _state.update { it.copy(error = null) }
